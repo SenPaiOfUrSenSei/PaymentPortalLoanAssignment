@@ -1,0 +1,65 @@
+version: '3.8'
+
+services:
+  postgres-db:
+    image: postgres:15-alpine
+    container_name: postgres-db
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: payment_portal
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d payment_portal"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  mock-setu:
+    build:
+      context: ./mock-setu
+      dockerfile: Dockerfile
+    container_name: mock-setu
+    restart: always
+    ports:
+      - "8081:8081"
+    environment:
+      - PORT=8081
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: backend-portal
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@postgres-db:5432/payment_portal
+      - SETU_API_BASE_URL=http://mock-setu:8081
+      - SETU_CLIENT_ID=mock_client_id
+      - SETU_CLIENT_SECRET=mock_client_secret
+      - SETU_PARTNER_ID=123456
+    depends_on:
+      postgres-db:
+        condition: service_healthy
+      mock-setu:
+        condition: service_started
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend-portal
+    restart: always
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+
+volumes:
+  postgres_data:
