@@ -841,3 +841,65 @@ p {
     padding: 2rem;
   }
 }
+
+/* Navigation tab styles */
+.nav-link-tab {
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-weight: 600;
+  transition: all 0.3s ease;
+  font-size: 0.95rem;
+  padding: 0.5rem 0.2rem;
+  border-bottom: 2px solid transparent;
+}
+.nav-link-tab:hover {
+  color: var(--text-primary);
+}
+.nav-link-tab.active {
+  color: var(--text-primary);
+  border-bottom: 2px solid #09090b;
+}
+
+/* Settlement layout */
+.settlement-container {
+  width: 100%;
+}
+.text-right {
+  text-align: right;
+}
+.text-left {
+  text-align: left;
+}
+
+/* Print configuration for No Due Certificate */
+@media print {
+  body {
+    background: #fff !important;
+    color: #000 !important;
+  }
+  .app-container {
+    min-height: auto;
+  }
+  .header, .footer, .no-print, .btn, button, nav {
+    display: none !important;
+  }
+  .main-content {
+    padding: 0 !important;
+    margin: 0 !important;
+    max-width: 100% !important;
+  }
+  .ndc-certificate-wrapper {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0 !important;
+    box-shadow: none !important;
+    border: none !important;
+  }
+  .ndc-card {
+    box-shadow: none !important;
+    border: 4px double #000 !important;
+    padding: 2rem !important;
+  }
+}

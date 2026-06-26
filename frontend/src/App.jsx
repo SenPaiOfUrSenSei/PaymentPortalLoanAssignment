@@ -1,5 +1,5 @@
 import React from 'react'
-import { BrowserRouter as Router, Routes, Route, Link } from 'react-router-dom'
+import { BrowserRouter as Router, Routes, Route, Link, NavLink } from 'react-router-dom'
 import { CreditCard } from 'lucide-react'
 
 // Import Pages
@@ -10,6 +10,7 @@ import LoanList from './pages/LoanList.jsx'
 import CheckoutSimulate from './pages/CheckoutSimulate.jsx'
 import PaymentStatus from './pages/PaymentStatus.jsx'
 import Invoice from './pages/Invoice.jsx'
+import Settlement from './pages/Settlement.jsx'
 
 export default function App() {
   return (
@@ -22,10 +23,13 @@ export default function App() {
             <CreditCard size={28} />
             <span>ArisX</span>
           </Link>
-          <nav>
-            <Link to="/billers" className="nav-link">
-              Search Providers
-            </Link>
+          <nav className="nav-tabs">
+            <NavLink to="/" className={({ isActive }) => `nav-link-tab ${isActive ? 'active' : ''}`} end>
+              Pay Loan EMI
+            </NavLink>
+            <NavLink to="/settlement" className={({ isActive }) => `nav-link-tab ${isActive ? 'active' : ''}`}>
+              Loan Settlement
+            </NavLink>
           </nav>
         </header>
 
@@ -39,6 +43,7 @@ export default function App() {
             <Route path="/checkout/simulate" element={<CheckoutSimulate />} />
             <Route path="/payment/status" element={<PaymentStatus />} />
             <Route path="/invoice/:txnId" element={<Invoice />} />
+            <Route path="/settlement" element={<Settlement />} />
           </Routes>
         </main>
 

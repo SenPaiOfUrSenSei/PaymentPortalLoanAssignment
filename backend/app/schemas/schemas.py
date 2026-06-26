@@ -87,3 +87,20 @@ class TransactionInvoiceResponse(BaseModel):
     class Config:
         from_attributes = True
         populate_by_name = True
+
+
+# Settlement schemas
+class ConsentRequest(BaseModel):
+    mobile: str
+
+class ConsentApproveRequest(BaseModel):
+    mobile: str
+    otp: str
+
+class CalculateSettlementRequest(BaseModel):
+    loanId: UUID
+
+class PaySettlementRequest(BaseModel):
+    loanId: UUID
+    amount: int  # in paise
+    paymentGateway: str

@@ -1,6 +1,6 @@
 import datetime
 import uuid
-from sqlalchemy import Column, String, Integer, DateTime, JSON, ForeignKey
+from sqlalchemy import Column, String, Integer, DateTime, JSON, ForeignKey, Float
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
 from app.core.database import Base
@@ -46,3 +46,37 @@ class Transaction(Base):
     bill_number = Column(String, nullable=False)
 
     fetch_session = relationship("CustomerFetchSession", back_populates="transactions")
+
+
+class UserConsent(Base):
+    __tablename__ = "user_consents"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    mobile = Column(String, nullable=False, index=True)
+    consent_id = Column(String, nullable=False, unique=True, index=True)
+    status = Column(String, nullable=False, default="ACTIVE")  # ACTIVE, REVOKED
+    fi_types = Column(JSON, nullable=False)  # list of FI types, e.g. ["LOAN", "CREDIT_CARD"]
+    expiry = Column(DateTime, nullable=True)  # null represents indefinite
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+
+
+class Loan(Base):
+    __tablename__ = "loans"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    mobile = Column(String, nullable=False, index=True)
+    biller_id = Column(String, nullable=False)
+    biller_name = Column(String, nullable=False)
+    loan_account_number = Column(String, nullable=False, index=True)
+    customer_name = Column(String, nullable=False)
+    type = Column(String, nullable=False, default="LOAN")  # LOAN, CREDIT_CARD
+    total_outstanding = Column(Integer, nullable=False)  # in paise
+    principal_outstanding = Column(Integer, nullable=False)  # in paise
+    interest_outstanding = Column(Integer, nullable=False)  # in paise
+    interest_rate = Column(Float, nullable=False, default=12.0)
+    remaining_tenure_months = Column(Integer, nullable=False, default=12)
+    dpd = Column(Integer, nullable=False, default=0)
+    status = Column(String, nullable=False, default="ACTIVE")  # ACTIVE, SETTLED
+    created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    settled_at = Column(DateTime, nullable=True)
+    settled_amount = Column(Integer, nullable=True)  # in paise

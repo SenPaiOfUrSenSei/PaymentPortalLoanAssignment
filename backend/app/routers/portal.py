@@ -3,6 +3,7 @@ import logging
 import asyncio
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+import uuid
 from uuid import UUID
 from typing import List, Any
 import httpx
@@ -145,6 +146,17 @@ async def poll_fetch(fetch_session_id: UUID, db: Session = Depends(get_db)):
     session = crud.get_fetch_session(db, fetch_session_id)
     if not session:
         raise HTTPException(status_code=404, detail="Fetch session not found")
+
+    # Intercept settled loans
+    loan_acc = session.customer_params.get("Loan Account Number")
+    if loan_acc:
+        db_loan = crud.get_loan_by_account_number(db, loan_acc)
+        if db_loan and db_loan.status == "SETTLED":
+            logger.info(f"Loan account {loan_acc} is settled. Blocking fetch poll.")
+            return {
+                "status": "FAILURE",
+                "error": "No active bills found. This loan account has been fully settled and closed."
+            }
         
     # If already terminal state, return directly
     if session.status in ["SUCCESS", "FAILURE"]:
@@ -431,4 +443,159 @@ async def get_invoice(txn_id: UUID, db: Session = Depends(get_db)):
         "billNumber": txn.bill_number,
         "billerName": biller_name,
         "billerId": biller_id
+    }
+
+
+# Account Aggregator and Settlement Routes
+@router.post("/settlement/consent/request")
+async def request_consent(payload: schemas.ConsentRequest, db: Session = Depends(get_db)):
+    consent_id = "CNS-" + str(uuid.uuid4().hex[:12]).upper()
+    return {
+        "consentId": consent_id,
+        "status": "AWAITING_APPROVAL",
+        "redirectUrl": f"https://mock-aa.setu.co/consent/{consent_id}"
+    }
+
+@router.post("/settlement/consent/approve")
+async def approve_consent(payload: schemas.ConsentApproveRequest, db: Session = Depends(get_db)):
+    if not payload.otp or len(payload.otp) != 6:
+        raise HTTPException(status_code=400, detail="Invalid OTP code format.")
+    
+    # Accept any 6-digit OTP for the mock
+    logger.info(f"Consent approved via OTP {payload.otp} for mobile {payload.mobile}")
+    
+    consent_id = "CNS-" + str(uuid.uuid4().hex[:12]).upper()
+    crud.create_user_consent(
+        db=db,
+        mobile=payload.mobile,
+        consent_id=consent_id,
+        fi_types=["LOAN", "CREDIT_CARD"]
+    )
+    return {
+        "success": True,
+        "consentId": consent_id,
+        "message": "Consent granted indefinitely for LOAN and CREDIT_CARD data types."
+    }
+
+@router.get("/settlement/loans")
+async def get_settlement_loans(mobile: str, db: Session = Depends(get_db)):
+    # Check if consent exists and is active
+    consent = crud.get_user_consent(db, mobile)
+    if not consent:
+        raise HTTPException(status_code=403, detail="No active Account Aggregator consent found. Please grant consent first.")
+        
+    loans = crud.get_user_loans(db, mobile)
+    return [
+        {
+            "id": l.id,
+            "mobile": l.mobile,
+            "billerId": l.biller_id,
+            "billerName": l.biller_name,
+            "loanAccountNumber": l.loan_account_number,
+            "customerName": l.customer_name,
+            "type": l.type,
+            "totalOutstanding": l.total_outstanding,
+            "principalOutstanding": l.principal_outstanding,
+            "interestOutstanding": l.interest_outstanding,
+            "interestRate": l.interest_rate,
+            "remainingTenureMonths": l.remaining_tenure_months,
+            "dpd": l.dpd,
+            "status": l.status,
+            "settledAt": l.settled_at,
+            "settledAmount": l.settled_amount
+        }
+        for l in loans
+    ]
+
+@router.post("/settlement/calculate")
+async def calculate_settlement(payload: schemas.CalculateSettlementRequest, db: Session = Depends(get_db)):
+    loan = crud.get_loan(db, payload.loanId)
+    if not loan:
+        raise HTTPException(status_code=404, detail="Loan record not found.")
+        
+    if loan.status == "SETTLED":
+        raise HTTPException(status_code=400, detail="Account is already settled.")
+        
+    # Calculate discount percentages based on DPD
+    dpd = loan.dpd
+    if dpd >= 90:
+        principal_discount_pct = 0.50
+        interest_discount_pct = 0.80
+        category = "NPA (Non-Performing Asset - Critical)"
+    elif dpd >= 60:
+        principal_discount_pct = 0.30
+        interest_discount_pct = 0.60
+        category = "Substandard (Pre-NPA)"
+    elif dpd >= 30:
+        principal_discount_pct = 0.15
+        interest_discount_pct = 0.40
+        category = "SMA-1 (Special Mention Account)"
+    else:  # dpd == 0 or SMA-0
+        principal_discount_pct = 0.00
+        interest_discount_pct = 0.05  # Prepayment waiver
+        category = "Standard (Healthy Account)"
+        
+    principal_discount = int(loan.principal_outstanding * principal_discount_pct)
+    interest_discount = int(loan.interest_outstanding * interest_discount_pct)
+    total_discount = principal_discount + interest_discount
+    settlement_amount = loan.total_outstanding - total_discount
+    
+    return {
+        "loanId": loan.id,
+        "loanAccountNumber": loan.loan_account_number,
+        "billerName": loan.biller_name,
+        "billerId": loan.biller_id,
+        "customerName": loan.customer_name,
+        "type": loan.type,
+        "category": category,
+        "dpd": dpd,
+        "totalOutstanding": loan.total_outstanding,
+        "principalOutstanding": loan.principal_outstanding,
+        "interestOutstanding": loan.interest_outstanding,
+        "principalDiscountPct": principal_discount_pct * 100,
+        "interestDiscountPct": interest_discount_pct * 100,
+        "principalDiscount": principal_discount,
+        "interestDiscount": interest_discount,
+        "totalDiscount": total_discount,
+        "settlementAmount": settlement_amount
+    }
+
+@router.post("/settlement/pay")
+async def pay_settlement(payload: schemas.PaySettlementRequest, db: Session = Depends(get_db)):
+    loan = crud.get_loan(db, payload.loanId)
+    if not loan:
+        raise HTTPException(status_code=404, detail="Loan record not found.")
+        
+    if loan.status == "SETTLED":
+        return {
+            "success": True,
+            "message": "Account has already been settled.",
+            "loan": {
+                "id": loan.id,
+                "loanAccountNumber": loan.loan_account_number,
+                "billerName": loan.biller_name,
+                "customerName": loan.customer_name,
+                "status": loan.status
+            }
+        }
+        
+    # Mark loan settled in DB
+    settled_loan = crud.settle_loan(db, payload.loanId, payload.amount)
+    
+    # Generate mock No Due Certificate ID
+    ndc_id = "NDC-" + str(uuid.uuid4().hex[:14]).upper()
+    
+    return {
+        "success": True,
+        "message": "Loan account fully settled and closed.",
+        "ndcId": ndc_id,
+        "settledAt": settled_loan.settled_at,
+        "settledAmount": settled_loan.settled_amount,
+        "loan": {
+            "id": settled_loan.id,
+            "loanAccountNumber": settled_loan.loan_account_number,
+            "billerName": settled_loan.biller_name,
+            "customerName": settled_loan.customer_name,
+            "status": settled_loan.status
+        }
     }

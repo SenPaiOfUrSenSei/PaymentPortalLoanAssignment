@@ -76,3 +76,65 @@ def update_transaction(db: Session, txn_id: UUID, status: str, payment_ref_id: s
         db.commit()
         db.refresh(db_txn)
     return db_txn
+
+# UserConsent operations
+def get_user_consent(db: Session, mobile: str):
+    return db.query(models.UserConsent).filter(models.UserConsent.mobile == mobile, models.UserConsent.status == "ACTIVE").first()
+
+def create_user_consent(db: Session, mobile: str, consent_id: str, fi_types: list, expiry: datetime.datetime = None):
+    # Deactivate existing active consents for this mobile first
+    db.query(models.UserConsent).filter(models.UserConsent.mobile == mobile, models.UserConsent.status == "ACTIVE").update({"status": "REVOKED"})
+    db.commit()
+    
+    db_consent = models.UserConsent(
+        mobile=mobile,
+        consent_id=consent_id,
+        fi_types=fi_types,
+        expiry=expiry,
+        status="ACTIVE"
+    )
+    db.add(db_consent)
+    db.commit()
+    db.refresh(db_consent)
+    return db_consent
+
+# Loan operations
+def get_user_loans(db: Session, mobile: str):
+    return db.query(models.Loan).filter(models.Loan.mobile == mobile).order_by(models.Loan.created_at.desc()).all()
+
+def get_loan_by_account_number(db: Session, loan_account_number: str):
+    return db.query(models.Loan).filter(models.Loan.loan_account_number == loan_account_number).first()
+
+def get_loan(db: Session, loan_id: UUID):
+    return db.query(models.Loan).filter(models.Loan.id == loan_id).first()
+
+def settle_loan(db: Session, loan_id: UUID, settled_amount: int):
+    db_loan = get_loan(db, loan_id)
+    if db_loan:
+        db_loan.status = "SETTLED"
+        db_loan.settled_amount = settled_amount
+        db_loan.settled_at = datetime.datetime.utcnow()
+        db.commit()
+        db.refresh(db_loan)
+    return db_loan
+
+def create_loan(db: Session, mobile: str, biller_id: str, biller_name: str, loan_account_number: str, customer_name: str, type: str, total_outstanding: int, principal_outstanding: int, interest_outstanding: int, interest_rate: float, remaining_tenure_months: int, dpd: int):
+    db_loan = models.Loan(
+        mobile=mobile,
+        biller_id=biller_id,
+        biller_name=biller_name,
+        loan_account_number=loan_account_number,
+        customer_name=customer_name,
+        type=type,
+        total_outstanding=total_outstanding,
+        principal_outstanding=principal_outstanding,
+        interest_outstanding=interest_outstanding,
+        interest_rate=interest_rate,
+        remaining_tenure_months=remaining_tenure_months,
+        dpd=dpd,
+        status="ACTIVE"
+    )
+    db.add(db_loan)
+    db.commit()
+    db.refresh(db_loan)
+    return db_loan

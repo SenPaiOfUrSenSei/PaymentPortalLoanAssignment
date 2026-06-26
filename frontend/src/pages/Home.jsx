@@ -18,7 +18,7 @@ export default function Home() {
         
         <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
           <button className="btn btn-primary" onClick={() => navigate('/billers')}>
-            Pay Loan EMI <ArrowRight size={18} />
+            Pay Entire Amount <ArrowRight size={18} />
           </button>
         </div>
 
