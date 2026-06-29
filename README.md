@@ -1,96 +1,141 @@
 # ArisX - Loan Payment Portal
 
-**ArisX** is a fully containerized, high-performance **Loan Payment Portal** built to integrate with the **Setu BBPS (v2) BillPay APIs**. It features a modern, high-contrast monochrome light-themed user interface, an asynchronous bill-fetching engine, PhonePe/GooglePay payment simulation, and printable digital receipts (with PDF download support).
+**ArisX** is a premium, high-performance **Loan Payment Portal** built to integrate with the **Setu BBPS (v2) BillPay APIs** and **Decentro Bureau Score Handshakes**. It features a modern, responsive monochrome light-themed user interface, interactive credit bureau scoring simulators, automated UPI Mandate notifications, and printable digital receipts (with PDF download support).
 
 ---
 
 ## 🚀 Key Features
 
-* **Setu BBPS (v2) Integration**: Fully mimics official Bharat Bill Payment System (BBPS) flows via a mock Setu sandbox server.
-* **Asynchronous Fetching & Polling**: Uses a non-blocking state machine for polling biller data and verifying checkout states.
-* **Premium UX/UI**: Styled using a customized CSS design system with Outfit & Plus Jakarta Sans typography, micro-animations, glassmorphic inputs, and responsive card views.
-* **Receipt Downloads**: One-click client-side PDF invoice compilation via `html2pdf.js`.
-* **Automated Seed/Cache**: Local database cache seeded with pre-configured mock loan accounts for quick end-to-end sandbox execution.
+* **Setu BBPS (v2) Sandbox**: Simulates official Bharat Bill Payment System (BBPS) flows via a mock Setu server (OAuth 2.0 token grant, bill fetches, status polling, and payment completion).
+* **Decentro Bureau score handshake**: Performs a deterministic bureau-scoring matrix simulation representing NPCI/Experian regulations, calculating score deltas (± points) for user actions.
+* **UPI AutoPay Mandates**: Full recurring collection layout using Setu's UPI AutoPay network.
+* **Unified Account Statements**: A consolidated history log querying manual BBPS repayments, completed loan settlements, and AutoPay mandate debits.
+* **Modern Design**: Premium light glassmorphism CSS design system with Outfit & Plus Jakarta Sans typography, micro-animations, and responsive visual layout grids.
 
 ---
 
-## 🏗️ Architecture
+## 🏗️ System Architecture
 
-ArisX is orchestrated using **Docker Compose** across four services:
-
-1. **`postgres-db`** (Port `5432`): Stores local biller lists, active fetch sessions, and transaction details.
-2. **`mock-setu`** (Port `8081`): Simulates Setu's OAuth 2.0 token endpoint and BBPS v2 APIs (fetch, poll, and payment receipt confirmation).
-3. **`backend`** (Port `8000`): Built with FastAPI, SQL Alchemy, and Pydantic. Connects to `postgres-db` and forwards verified payloads to `mock-setu`.
-4. **`frontend`** (Port `5173`): Single Page Application built with React, Vite, and Lucide React icons.
+The application comprises four key services:
+1. **`postgres-db`** (Port `5432`): Database for user profiles, biller mappings, fetch sessions, and transaction records.
+2. **`mock-setu`** (Port `8081`): Replicates Setu OAuth and BBPS v2 endpoints.
+3. **`backend`** (Port `8000`): FastAPI server orchestrating database CRUD operations and forwarding requests to `mock-setu`.
+4. **`frontend`** (Port `5173`): Vite Single Page Application using React and Lucide Icons.
 
 ---
 
-## 🛠️ Getting Started
+## 🛠️ Running the Application
 
-### Prerequisites
-* Docker and Docker Compose installed.
+You can spin up the application in two ways: using **Docker Compose** (recommended for simplicity) or **Running Locally (Bare-Metal)**.
 
-### Setup and Launch
-Build and boot the services using Docker Compose:
+### Option A: Running with Docker Compose (Containerized)
+
+This option packages and orchestrates all services automatically.
+
+#### Prerequisites
+* Make sure you have Docker and Docker Compose installed.
+
+#### Setup and Launch
+Run the following commands in the project root:
 
 ```bash
-# 1. Build backend, mock-setu, and database
-docker-compose up -d --build postgres-db mock-setu backend
+# 1. Build and boot backend, mock-setu, and database services
+docker compose up -d --build postgres-db mock-setu backend
 
-# 2. Build frontend using local cached layers (recommended to bypass external DNS resolution limits)
+# 2. Build frontend using local layers (prevents external DNS resolution limits)
 docker build --pull=false -t paymentportalforloan-frontend:latest ./frontend
 
-# 3. Boot frontend without rebuilding
-docker-compose up -d --no-build frontend
+# 3. Boot frontend without forcing rebuild
+docker compose up -d --no-build frontend
 ```
 
 The portal will be running locally at: **[http://localhost:5173](http://localhost:5173)**.
 
 ---
 
-## 🧪 Testing the Flow
+### Option B: Running Locally (Bare-Metal)
+
+Use this option to run services natively on your system for local testing/development.
+
+#### Prerequisites
+* **Python 3.11+** installed.
+* **Node.js 18+** & **npm** installed.
+* **PostgreSQL** installed and running locally.
+
+#### Step 1: Set up the PostgreSQL Database
+Create a database named `payment_portal` in your local Postgres instance:
+```sql
+CREATE DATABASE payment_portal;
+```
+
+#### Step 2: Configure Environment Variables
+Create a `.env` file in `backend/` and `mock-setu/` directories or export variables:
+```ini
+# backend/.env
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/payment_portal
+SETU_API_BASE_URL=http://localhost:8081
+SETU_CLIENT_ID=mock_client_id
+SETU_CLIENT_SECRET=mock_client_secret
+SETU_PARTNER_ID=123456
+JWT_SECRET=super_secret_jwt_key_arisx_2026
+```
+
+#### Step 3: Run the Mock Setu Service
+Open a new terminal and navigate to the `mock-setu` folder:
+```bash
+cd mock-setu
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --port 8081 --host 0.0.0.0
+```
+
+#### Step 4: Run the Backend Service
+Open a new terminal and navigate to the `backend` folder:
+```bash
+cd backend
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
+uvicorn app.main:app --port 8000 --host 0.0.0.0
+```
+*(FastAPI will automatically create tables and seed default mock loans in PostgreSQL on the first launch)*.
+
+#### Step 5: Run the Frontend Service
+Open a new terminal and navigate to the `frontend` folder:
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The React Vite app will run on: **[http://localhost:5173](http://localhost:5173)**.
+
+---
+
+## 🧪 Sandbox Testing Flow
 
 ### Demo Credentials
-You can use the following seeded account to test the loan repayment pipeline:
-* **Biller**: `Aditya Birla Finance` (or search for HDFC/SBI on the providers page)
-* **Loan Account Number**: `1895159`
-* **Mobile Number**: `9876543210`
+To test the full bill fetching, AutoPay mandate creation, settlement, and bureau score updates, sign in with one of the pre-seeded credentials:
 
-### Automated Integration Test
-A pre-configured python integration test is available to run the entire BBPS mock cycle programmatically:
+* **Demo User 1**:
+  - **Mobile Number**: `9876543210`
+  - **Legal Name**: Aarav Sharma
+  - **OTP**: Use any 6-digit number (e.g. `123456`)
+  - **Seeded accounts**: Aditya Birla Finance (`1895159`), HDFC Loan Services (`12345678`)
+
+* **Demo User 2**:
+  - **Mobile Number**: `9999988888`
+  - **Legal Name**: Priya Patel
+  - **OTP**: Use any 6-digit number
+  - **Seeded accounts**: SBI Loans (`1111222233`)
+
+### Automated API Integration Test
+A pre-configured python integration test is available to run the entire backend BBPS mock cycle programmatically:
 
 ```bash
 # Run the end-to-end flow test
 python3 test_flow.py
-```
-
-Expected Output:
-```text
-=== STARTING END-TO-END PAYMENT PORTAL TEST ===
-
-1. Fetching billers list...
-Retrieved 3 billers:
-  - HDFC Loan Services (HDFC00000NAT01)
-  - Aditya Birla Finance (ADIT00000NAT02)
-  - SBI Loans (SBIL00000NAT03)
-
-2. Initiating bill fetch...
-Created Fetch Session: 8d4df12f-... | Setu Ref ID: FETCH-...
-
-3. Polling fetch session status...
-  Poll 1 status: PENDING
-  Poll 2 status: SUCCESS
-Fetch Successful! Customer: Manoj Chekuri
-
-4. Initiating payment...
-Created Transaction: e1399e50-... | Status: PENDING
-
-5. Simulating payment confirmation on checkout...
-Simulation result - Status: SUCCESSFUL | Setu Pay Ref: PAY-...
-
-6. Fetching final invoice receipt...
-Retrieved invoice successfully.
-=== ALL TESTS PASSED SUCCESSFULLY! ===
 ```
 
 ---
@@ -101,28 +146,27 @@ Retrieved invoice successfully.
 Payment Portal For Loan/
 ├── backend/
 │   ├── app/
-│   │   ├── core/           # Configuration, security/token management, database
+│   │   ├── core/           # Config, security, DB session definitions
 │   │   ├── models/         # SQLAlchemy models (PostgreSQL)
 │   │   ├── schemas/        # Pydantic validation schemas
 │   │   ├── crud/           # Database CRUD helper functions
-│   │   └── routers/        # FastAPI portal routes (billers, fetch, payment, receipt)
+│   │   └── routers/        # FastAPI routers (auth, portal, mandates)
 │   ├── Dockerfile
 │   └── requirements.txt
 ├── mock-setu/
 │   ├── app/
-│   │   ├── mock_data.py    # Seeded billers (3) and active customer loans (5)
+│   │   ├── mock_data.py    # Seeded billers and active sandbox accounts
 │   │   └── main.py         # Mock server mimicking Setu BBPS v2 APIs
 │   ├── Dockerfile
 │   └── requirements.txt
 ├── frontend/
 │   ├── src/
-│   │   ├── pages/          # Home, Billers, Identify, LoanList, CheckoutSimulate, PaymentStatus, Invoice
-│   │   ├── styles/         # Glassmorphic vanilla CSS design system
-│   │   ├── App.jsx         # Routes & Shell layout
+│   │   ├── pages/          # Home, Billers, Identify, LoanList, CheckoutSimulate, Settlement, AutopayDashboard, Statement
+│   │   ├── styles/         # Glassmorphic custom CSS rules
+│   │   ├── App.jsx         # Routes registration & Layout container
 │   │   └── main.jsx
 │   ├── Dockerfile
 │   ├── package.json
 │   └── vite.config.js
 └── docker-compose.yml
 ```
-# PaymentPortalLoanAssignment
