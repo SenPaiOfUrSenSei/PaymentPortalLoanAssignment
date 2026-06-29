@@ -54,7 +54,7 @@ export default function Home() {
 
   const getScoreDelta = (actionType, loanType) => {
     const activeCount = currentUser?.totalActiveAccounts || 3
-    
+
     if (actionType === 'PAY_NOW') {
       if (loanType === 'CREDIT_CARD') {
         return '+45'
@@ -87,7 +87,7 @@ export default function Home() {
     }
 
     setLoading(true)
-    
+
     // 2. Call initiate fetch
     const payload = {
       billerId: loan.biller_id,
@@ -113,11 +113,11 @@ export default function Home() {
       })
       .then((data) => {
         setLoading(false)
-        navigate('/loans', { 
-          state: { 
+        navigate('/loans', {
+          state: {
             fetchSessionId: data.fetchSessionId,
             biller: foundBiller
-          } 
+          }
         })
       })
       .catch(err => {
@@ -131,7 +131,7 @@ export default function Home() {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '3rem' }}>
-      
+
       {/* Hero Header Section */}
       <div className="hero-section">
         <div className="hero-content animate-fade-in">
@@ -147,9 +147,9 @@ export default function Home() {
             </h1>
           )}
           <p className="hero-subtitle">
-            Securely fetch, view, and pay your active Loan EMIs instantly through the official Bharat Bill Payment System (BBPS) gateway.
+            Securely fetch, view, and pay your active Loan EMIs instantly through the Bharat Bill Payment System (BBPS) gateway.
           </p>
-          
+
           {/* Action buttons (Sign In / Sign Up) if not logged in */}
           {!loggedIn && (
             <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
@@ -169,17 +169,15 @@ export default function Home() {
               </div>
               <div>
                 <p style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>NPCI Verified</p>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>BBPS Compliant</p>
               </div>
             </div>
-            
+
             <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
               <div style={{ background: 'rgba(168, 85, 247, 0.1)', color: '#a855f7', padding: '0.6rem', borderRadius: '10px' }}>
                 <CreditCard size={20} />
               </div>
               <div>
-                <p style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>Instant Settlement</p>
-                <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Direct loan updates</p>
+                <p style={{ fontWeight: 700, fontSize: '0.9rem', color: 'var(--text-primary)' }}>Instant NOC</p>
               </div>
             </div>
           </div>
@@ -192,9 +190,9 @@ export default function Home() {
               <div className="hero-card-chip"></div>
               <span className="hero-card-brand">ArisX</span>
             </div>
-            
+
             <div className="hero-card-number">•••• •••• •••• {loggedIn ? user?.mobile.substring(6) : '2026'}</div>
-            
+
             <div className="hero-card-info">
               <div>
                 <p>CARDHOLDER</p>
@@ -214,7 +212,7 @@ export default function Home() {
       {/* Logged In Dashboard Section */}
       {loggedIn && (
         <div className="animate-fade-in" style={{ borderTop: '1px solid var(--glass-border)', paddingTop: '3rem', width: '100%' }}>
-          
+
           {/* Credit Score Card */}
           {currentUser && (
             <div className="glass-panel" style={{
@@ -232,7 +230,7 @@ export default function Home() {
             }}>
               <div style={{ flex: '1 1 300px' }}>
                 <h3 style={{ fontSize: '0.85rem', color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.1em', marginBottom: '0.5rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                  <ShieldCheck size={16} /> Experian Credit Bureau Report
+                  <ShieldCheck size={16} /> Credit Bureau Report
                 </h3>
                 <h2 style={{ fontSize: '2.8rem', fontWeight: 800, margin: '0.5rem 0 0.2rem 0', fontFamily: 'var(--font-heading)', color: 'var(--text-primary)' }}>
                   {currentUser.creditScore || 715} <span style={{ fontSize: '1rem', fontWeight: 400, color: 'var(--text-muted)' }}>/ 900</span>
@@ -248,12 +246,9 @@ export default function Home() {
                   }}>
                     {(currentUser.creditScore || 715) >= 750 ? 'EXCELLENT PROFILE' : 'GOOD STANDING'}
                   </span>
-                  <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                    • Updated dynamically upon login
-                  </span>
                 </div>
                 <p style={{ fontSize: '0.85rem', color: 'var(--text-secondary)', marginTop: '1.2rem', lineHeight: '1.6' }}>
-                  Your aggregate credit utilization is <strong style={{ color: 'var(--text-primary)' }}>{currentUser.creditUtilizationRatio ?? 75}%</strong> across <strong style={{ color: 'var(--text-primary)' }}>{currentUser.totalActiveAccounts ?? 3}</strong> active trades. Maintaining credit utilization ratio (CUR) below 30% signals low credit dependency.
+                  Your credit utilization is <strong style={{ color: 'var(--text-primary)' }}>{currentUser.creditUtilizationRatio ?? 75}%</strong> across <strong style={{ color: 'var(--text-primary)' }}>{currentUser.totalActiveAccounts ?? 3}</strong> active trades. Maintaining credit utilization ratio (CUR) below 30% signals low credit dependency.
                 </p>
               </div>
 
@@ -278,7 +273,7 @@ export default function Home() {
                 </svg>
                 <div style={{ position: 'absolute', textAlign: 'center' }}>
                   <span style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-heading)' }}>{currentUser.creditScore || 715}</span>
-                  <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>CRIF Score</p>
+                  <p style={{ fontSize: '0.65rem', color: 'var(--text-muted)', margin: 0, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Credit Score</p>
                 </div>
               </div>
             </div>
@@ -359,16 +354,16 @@ export default function Home() {
 
                     {/* Actions Row */}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.7rem' }}>
-                      <button 
-                        className="btn btn-primary" 
+                      <button
+                        className="btn btn-primary"
                         style={{ padding: '0.6rem 1rem', fontSize: '0.9rem', cursor: 'pointer' }}
                         onClick={() => handlePayNow(loan)}
                         disabled={loan.status === 'SETTLED'}
                       >
                         Pay Now <ArrowRight size={16} />
                       </button>
-                      <button 
-                        className="btn btn-secondary" 
+                      <button
+                        className="btn btn-secondary"
                         style={{ padding: '0.6rem 1rem', fontSize: '0.9rem', cursor: 'pointer' }}
                         onClick={() => navigate('/settlement', { state: { preSelectedLoanId: loan.id, preSelectedLoan: loan } })}
                         disabled={loan.status === 'SETTLED'}
@@ -383,8 +378,8 @@ export default function Home() {
               {/* Show More/Less Toggle */}
               {loans.length > 2 && (
                 <div style={{ display: 'flex', justifyContent: 'center' }}>
-                  <button 
-                    className="btn btn-secondary" 
+                  <button
+                    className="btn btn-secondary"
                     style={{ padding: '0.6rem 1.8rem', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '0.5rem' }}
                     onClick={() => setShowAllLoans(!showAllLoans)}
                   >
@@ -405,7 +400,7 @@ export default function Home() {
               <div style={{ borderTop: '1px solid var(--glass-border)', marginTop: '3rem', paddingTop: '2.5rem', width: '100%' }}>
                 <h3 style={{ marginBottom: '1.2rem', fontSize: '1.2rem', color: 'var(--text-primary)' }}>Quick Action <span className="gradient-text">Hub</span></h3>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1.5rem', width: '100%' }}>
-                  
+
                   {/* Action 1: Setup AutoPay (UPI Mandate) */}
                   <div className="glass-panel" style={{
                     padding: '1.8rem',
@@ -419,15 +414,15 @@ export default function Home() {
                     transition: 'all 0.2s',
                     cursor: 'pointer'
                   }}
-                  onClick={() => navigate('/autopay')}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-4px)'
-                    e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.4)'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)'
-                    e.currentTarget.style.borderColor = 'var(--glass-border)'
-                  }}>
+                    onClick={() => navigate('/autopay')}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-4px)'
+                      e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.4)'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)'
+                      e.currentTarget.style.borderColor = 'var(--glass-border)'
+                    }}>
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: '1rem' }}>
                         <Calendar size={18} color="#4f46e5" />
@@ -453,17 +448,17 @@ export default function Home() {
                     transition: 'all 0.2s',
                     cursor: 'pointer'
                   }}
-                  onClick={() => {
-                    window.scrollTo({ top: 0, behavior: 'smooth' })
-                  }}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-4px)'
-                    e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.4)'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)'
-                    e.currentTarget.style.borderColor = 'var(--glass-border)'
-                  }}>
+                    onClick={() => {
+                      window.scrollTo({ top: 0, behavior: 'smooth' })
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-4px)'
+                      e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.4)'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)'
+                      e.currentTarget.style.borderColor = 'var(--glass-border)'
+                    }}>
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: '1rem' }}>
                         <CreditCard size={18} color="#4f46e5" />
@@ -489,15 +484,15 @@ export default function Home() {
                     transition: 'all 0.2s',
                     cursor: 'pointer'
                   }}
-                  onClick={() => navigate('/settlement')}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-4px)'
-                    e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.4)'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)'
-                    e.currentTarget.style.borderColor = 'var(--glass-border)'
-                  }}>
+                    onClick={() => navigate('/settlement')}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-4px)'
+                      e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.4)'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)'
+                      e.currentTarget.style.borderColor = 'var(--glass-border)'
+                    }}>
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: '1rem' }}>
                         <ShieldCheck size={18} color="#4f46e5" />
@@ -523,15 +518,15 @@ export default function Home() {
                     transition: 'all 0.2s',
                     cursor: 'pointer'
                   }}
-                  onClick={() => navigate('/statement')}
-                  onMouseEnter={(e) => {
-                    e.currentTarget.style.transform = 'translateY(-4px)'
-                    e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.4)'
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.transform = 'translateY(0)'
-                    e.currentTarget.style.borderColor = 'var(--glass-border)'
-                  }}>
+                    onClick={() => navigate('/statement')}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.transform = 'translateY(-4px)'
+                      e.currentTarget.style.borderColor = 'rgba(99, 102, 241, 0.4)'
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.transform = 'translateY(0)'
+                      e.currentTarget.style.borderColor = 'var(--glass-border)'
+                    }}>
                     <div>
                       <div style={{ display: 'flex', justifyContent: 'flex-end', alignItems: 'center', marginBottom: '1rem' }}>
                         <FileText size={18} color="#4f46e5" />
