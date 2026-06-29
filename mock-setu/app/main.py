@@ -1,6 +1,12 @@
 import datetime
 import uuid
 import jwt
+import os
+import threading
+import urllib.request
+import hmac
+import hashlib
+import json
 from fastapi import FastAPI, Depends, HTTPException, Header, Query
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from pydantic import BaseModel, Field
@@ -315,4 +321,212 @@ def poll_payment(body: PaymentResponseRequest, token_payload: dict = Depends(ver
             },
             "refId": pay_ref_id
         }
+    }
+
+
+# =====================================================================
+# UPI Mandate & AutoPay Mock Implementation
+# =====================================================================
+
+mandates: Dict[str, Dict[str, Any]] = {}
+debits: Dict[str, Dict[str, Any]] = {}
+
+def send_webhook_background(url: str, payload: dict, secret: str):
+    def run():
+        try:
+            body = json.dumps(payload).encode('utf-8')
+            signature = hmac.new(
+                key=secret.encode("utf-8"),
+                msg=body,
+                digestmod=hashlib.sha256
+            ).hexdigest()
+            
+            req = urllib.request.Request(
+                url,
+                data=body,
+                headers={
+                    "Content-Type": "application/json",
+                    "X-Setu-Signature": signature
+                },
+                method="POST"
+            )
+            with urllib.request.urlopen(req, timeout=5) as response:
+                response.read()
+            print(f"Webhook sent successfully to {url}", flush=True)
+        except Exception as e:
+            print(f"Failed to send webhook to {url}: {e}", flush=True)
+
+    threading.Thread(target=run).start()
+
+class MandateCustomer(BaseModel):
+    mobile: str
+    email: Optional[str] = None
+    name: str
+    vpa: Optional[str] = None
+
+class MandateMerchantDetails(BaseModel):
+    name: str
+    categoryCode: str
+
+class MandateBillingAccount(BaseModel):
+    number: str
+    ifsc: str
+
+class MandateDetailsInput(BaseModel):
+    amount: int
+    amountRule: str
+    frequency: str
+    startDate: str
+    endDate: str
+    purposeCode: str
+    merchantDetails: Optional[MandateMerchantDetails] = None
+    billingAccount: Optional[MandateBillingAccount] = None
+
+class CreateMandateRequest(BaseModel):
+    referenceId: str
+    customer: MandateCustomer
+    mandateDetails: MandateDetailsInput
+    redirectUrl: str
+    metadata: Optional[Dict[str, Any]] = None
+
+class NotificationRequest(BaseModel):
+    amount: int
+    debitDate: str
+    note: str
+
+class DebitRequest(BaseModel):
+    amount: int
+    notificationId: str
+    referenceId: str
+    debitType: str
+
+@app.post("/v1/mandates")
+def create_mandate(body: CreateMandateRequest, token_payload: dict = Depends(verify_token)):
+    mandate_id = "MND-" + str(uuid.uuid4().hex[:12]).upper()
+    mandates[mandate_id] = {
+        "status": "INITIATED",
+        "reference_id": body.referenceId,
+        "customer": body.customer.dict(),
+        "mandate_details": body.mandateDetails.dict(),
+        "redirect_url": body.redirectUrl
+    }
+    
+    # Simulate async customer authorization callback
+    webhook_url = os.getenv("BACKEND_WEBHOOK_URL", "http://backend:8000/webhooks/setu-autopay")
+    webhook_secret = os.getenv("SETU_WEBHOOK_SECRET", "mock_webhook_secret")
+    
+    payload = {
+        "event": "mandate.active",
+        "data": {
+            "mandateId": mandate_id,
+            "umn": "UMN" + str(uuid.uuid4().hex[:16]).upper(),
+            "vpa": body.customer.vpa or "customer@upi",
+            "referenceId": body.referenceId
+        }
+    }
+    
+    def delayed_webhook():
+        import time
+        time.sleep(2)
+        send_webhook_background(webhook_url, payload, webhook_secret)
+        
+    threading.Thread(target=delayed_webhook).start()
+    
+    return {
+        "success": True,
+        "data": {
+            "id": mandate_id,
+            "status": "INITIATED",
+            "intentUrl": f"upi://mandate?pa=setu@ybl&am={body.mandateDetails.amount / 100}&mc=6012&tid={mandate_id}"
+        },
+        "traceId": "TR-" + str(uuid.uuid4().hex[:12]).upper()
+    }
+
+@app.post("/v1/mandates/{id}/notifications")
+def create_mandate_notification(id: str, body: NotificationRequest, token_payload: dict = Depends(verify_token)):
+    notification_id = "NTF-" + str(uuid.uuid4().hex[:12]).upper()
+    return {
+        "success": True,
+        "data": {
+            "notificationId": notification_id,
+            "status": "SUCCESS"
+        },
+        "traceId": "TR-" + str(uuid.uuid4().hex[:12]).upper()
+    }
+
+@app.post("/v1/mandates/{id}/debits", status_code=202)
+def execute_mandate_debit(id: str, body: DebitRequest, token_payload: dict = Depends(verify_token)):
+    debit_id = "DBT-" + str(uuid.uuid4().hex[:12]).upper()
+    debits[debit_id] = {
+        "mandate_id": id,
+        "amount": body.amount,
+        "reference_id": body.referenceId,
+        "status": "PENDING"
+    }
+    
+    webhook_url = os.getenv("BACKEND_WEBHOOK_URL", "http://backend:8000/webhooks/setu-autopay")
+    webhook_secret = os.getenv("SETU_WEBHOOK_SECRET", "mock_webhook_secret")
+    
+    # Check failure triggers (9999900 paise = 99,999 INR)
+    is_failure = (body.amount == 9999900)
+    
+    if is_failure:
+        payload = {
+            "event": "debit.failed",
+            "data": {
+                "debitId": debit_id,
+                "referenceId": body.referenceId,
+                "amount": body.amount,
+                "error": {
+                    "code": "insufficient-funds",
+                    "npciCode": "51",
+                    "message": "Transaction failed at issuer bank end due to insufficient funds."
+                }
+            }
+        }
+    else:
+        payload = {
+            "event": "debit.success",
+            "data": {
+                "debitId": debit_id,
+                "referenceId": body.referenceId,
+                "amount": body.amount
+            }
+        }
+        
+    def delayed_webhook():
+        import time
+        time.sleep(2)
+        send_webhook_background(webhook_url, payload, webhook_secret)
+        
+    threading.Thread(target=delayed_webhook).start()
+    
+    return {
+        "success": True,
+        "data": {
+            "debitId": debit_id,
+            "status": "PENDING"
+        },
+        "traceId": "TR-" + str(uuid.uuid4().hex[:12]).upper()
+    }
+
+@app.post("/v1/mandates/{id}/simulate-revoke")
+def simulate_mandate_revocation(id: str, token_payload: dict = Depends(verify_token)):
+    webhook_url = os.getenv("BACKEND_WEBHOOK_URL", "http://backend:8000/webhooks/setu-autopay")
+    webhook_secret = os.getenv("SETU_WEBHOOK_SECRET", "mock_webhook_secret")
+    
+    payload = {
+        "event": "mandate.revoked",
+        "data": {
+            "mandateId": id,
+            "referenceId": mandates.get(id, {}).get("reference_id", "REF-UNKNOWN"),
+            "revocationReason": "Revoked by customer inside GPay UPI App."
+        }
+    }
+    
+    send_webhook_background(webhook_url, payload, webhook_secret)
+    
+    return {
+        "success": True,
+        "message": f"Revocation webhook simulated for mandate {id}"
     }

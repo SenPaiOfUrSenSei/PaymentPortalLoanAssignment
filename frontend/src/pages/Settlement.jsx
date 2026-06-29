@@ -1,10 +1,15 @@
 import React, { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { 
   AlertCircle, Calendar, FileText, RefreshCw, User, ArrowLeft, ArrowRight, 
   CheckCircle, Lock, Shield, TrendingDown, Download, CreditCard, Printer, Info, HelpCircle
 } from 'lucide-react'
+import { isAuthenticated, getUser, authFetch } from '../utils/auth'
 
 export default function Settlement() {
+  const location = useLocation()
+  const { preSelectedLoanId, preSelectedLoan } = location.state || {}
+
   // Steps: LOGIN, CONSENT, DASHBOARD, CALCULATING, DETAILS, PAYMENT, SUCCESS
   const [step, setStep] = useState('LOGIN')
   const [mobile, setMobile] = useState('')
@@ -23,7 +28,11 @@ export default function Settlement() {
   const [quote, setQuote] = useState(null)
   const [paymentGateway, setPaymentGateway] = useState('GPay')
   const [settledResult, setSettledResult] = useState(null)
-  
+
+  // Credit score simulation states
+  const [simulationResult, setSimulationResult] = useState(null)
+  const [simulationLoading, setSimulationLoading] = useState(false)
+
   // App States
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -38,6 +47,60 @@ export default function Settlement() {
     }).format(paise / 100)
   }
 
+  // Automatic JWT login & direct redirect flow on mount
+  useEffect(() => {
+    if (!isAuthenticated()) return
+
+    const u = getUser()
+    if (!u) return
+
+    setMobile(u.mobile)
+    setLoading(true)
+    setError('')
+
+    // Check if user has AA consent, or request one
+    authFetch(`/api/settlement/loans?mobile=${u.mobile}`)
+      .then(async (res) => {
+        if (res.status === 403) {
+          // No active AA consent. Trigger consent request automatically
+          return authFetch('/api/settlement/consent/request', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ mobile: u.mobile })
+          })
+            .then(res => res.json())
+            .then(data => {
+              setConsentId(data.consentId)
+              setOtpSent(true)
+              setOtpHint('482165') // Mock OTP hint
+              setStep('CONSENT')
+              setLoading(false)
+            })
+        }
+        return res.json().then(data => {
+          setLoans(data)
+          if (data && data.length > 0) {
+            setCustomerName(data[0].customerName)
+          } else {
+            setCustomerName('Valued Customer')
+          }
+          setLoading(false)
+
+          // If a loan was pre-selected from the Home Screen, go straight to calculation
+          const loanToSettle = preSelectedLoan || (preSelectedLoanId ? data.find(l => l.id === preSelectedLoanId) : null)
+          if (loanToSettle && loanToSettle.status === 'ACTIVE') {
+            handleSettleNow(loanToSettle)
+          } else {
+            setStep('DASHBOARD')
+          }
+        })
+      })
+      .catch(err => {
+        setError(err.message)
+        setLoading(false)
+      })
+  }, [])
+
   // Phase 1: Request Consent (Login)
   const handleInitiateConsent = (e) => {
     e.preventDefault()
@@ -48,7 +111,7 @@ export default function Settlement() {
     setError('')
     setLoading(true)
     
-    fetch('/api/settlement/consent/request', {
+    authFetch('/api/settlement/consent/request', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mobile })
@@ -80,7 +143,7 @@ export default function Settlement() {
     setOtpError('')
     setLoading(true)
 
-    fetch('/api/settlement/consent/approve', {
+    authFetch('/api/settlement/consent/approve', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ mobile, otp })
@@ -101,7 +164,7 @@ export default function Settlement() {
 
   const fetchLoans = () => {
     setLoading(true)
-    fetch(`/api/settlement/loans?mobile=${mobile}`)
+    authFetch(`/api/settlement/loans?mobile=${mobile}`)
       .then(res => {
         if (!res.ok) throw new Error('Failed to retrieve active credit files.')
         return res.json()
@@ -113,7 +176,14 @@ export default function Settlement() {
         } else {
           setCustomerName('Valued Customer')
         }
-        setStep('DASHBOARD')
+        
+        // Check for pre-selected loan redirect
+        const loanToSettle = preSelectedLoanId ? data.find(l => l.id === preSelectedLoanId) : null
+        if (loanToSettle && loanToSettle.status === 'ACTIVE') {
+          handleSettleNow(loanToSettle)
+        } else {
+          setStep('DASHBOARD')
+        }
         setLoading(false)
       })
       .catch(err => {
@@ -127,26 +197,54 @@ export default function Settlement() {
     setSelectedLoan(loan)
     setStep('CALCULATING')
     setError('')
+    setSimulationLoading(true)
+    setSimulationResult(null)
 
-    // Hit calculation API
-    fetch('/api/settlement/calculate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ loanId: loan.id })
-    })
-      .then(res => {
+    const u = getUser()
+
+    // Hit calculation API and simulator API concurrently
+    Promise.all([
+      authFetch('/api/settlement/calculate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ loanId: loan.id })
+      }).then(res => {
         if (!res.ok) throw new Error('Failed to calculate settlement quotation.')
         return res.json()
+      }),
+      authFetch('/api/intelligence/simulate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          firstName: u?.first_name || 'User',
+          lastName: u?.last_name || '',
+          mobileNumber: u?.mobile || '',
+          pan: u?.pan || '',
+          consentFlag: true,
+          consentTimestamp: Math.floor(Date.now() / 1000),
+          simulatedAction: {
+            actionType: 'SETTLE_NOW',
+            monetaryValue: 0,
+            targetAccountType: loan.type || 'PERSONAL_LOAN'
+          }
+        })
+      }).then(res => {
+        if (!res.ok) throw new Error('Simulation failed')
+        return res.json()
       })
-      .then(data => {
-        setQuote(data)
-        // Hold on calculating screen for 2.5s for cool animation effect
+    ])
+      .then(([quoteData, simData]) => {
+        setQuote(quoteData)
+        setSimulationResult(simData)
+        setSimulationLoading(false)
+        // Hold on calculating screen for 2.2s for cool animation effect
         setTimeout(() => {
           setStep('DETAILS')
         }, 2200)
       })
       .catch(err => {
         setError(err.message)
+        setSimulationLoading(false)
         setStep('DASHBOARD')
       })
   }
@@ -160,7 +258,7 @@ export default function Settlement() {
     setLoading(true)
     setError('')
     
-    fetch('/api/settlement/pay', {
+    authFetch('/api/settlement/pay', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ 
@@ -666,6 +764,52 @@ export default function Settlement() {
                           {formatRupees(quote.settlementAmount)}
                         </span>
                       </div>
+                    </div>
+
+                    {/* Real-time Score Simulation Display */}
+                    <div style={{
+                      padding: '1.2rem',
+                      background: 'var(--bg-primary)',
+                      borderRadius: '12px',
+                      border: '1px solid var(--glass-border)',
+                      boxShadow: '0 2px 10px rgba(0,0,0,0.02)',
+                      marginBottom: '1.5rem',
+                      textAlign: 'left'
+                    }}>
+                      <h5 style={{ fontSize: '0.8rem', color: '#4f46e5', textTransform: 'uppercase', letterSpacing: '0.05em', margin: '0 0 0.8rem 0', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                        <Shield size={14} strokeWidth={2.5} /> Experian Score Simulation
+                      </h5>
+                      
+                      {simulationLoading && (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', color: 'var(--text-muted)' }}>
+                          <RefreshCw size={14} className="animate-spin" />
+                          <span>Running credit simulation matrix...</span>
+                        </div>
+                      )}
+
+                      {!simulationLoading && simulationResult && (
+                        <div>
+                          <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.8rem', flexWrap: 'wrap' }}>
+                            <div style={{ fontSize: '1.6rem', fontWeight: 800, color: 'var(--text-primary)', fontFamily: 'var(--font-heading)' }}>
+                              {simulationResult.simulation_engine?.simulated_score}{' '}
+                              <span style={{ fontSize: '0.85rem', fontWeight: 400, color: 'var(--text-muted)' }}>/ 900</span>
+                            </div>
+                            <div style={{
+                              fontSize: '0.7rem',
+                              fontWeight: 700,
+                              color: simulationResult.simulation_engine?.projected_delta >= 0 ? '#10b981' : '#ef4444',
+                              background: simulationResult.simulation_engine?.projected_delta >= 0 ? 'rgba(16, 185, 129, 0.08)' : 'rgba(239, 68, 68, 0.08)',
+                              padding: '0.2rem 0.5rem',
+                              borderRadius: '10px'
+                            }}>
+                              {simulationResult.simulation_engine?.projected_delta >= 0 ? '+' : ''}{simulationResult.simulation_engine?.projected_delta} Points
+                            </div>
+                          </div>
+                          <p style={{ fontSize: '0.8rem', color: 'var(--text-secondary)', marginTop: '0.6rem', lineHeight: '1.4', margin: 0 }}>
+                            {simulationResult.simulation_engine?.educational_insight}
+                          </p>
+                        </div>
+                      )}
                     </div>
                   </div>
 

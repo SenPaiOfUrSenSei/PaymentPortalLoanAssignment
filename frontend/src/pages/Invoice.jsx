@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Download, ShieldCheck, FileText, CheckCircle2 } from 'lucide-react'
+import { authFetch } from '../utils/auth'
 
 export default function Invoice() {
   const { txnId } = useParams()
@@ -13,7 +14,7 @@ export default function Invoice() {
   useEffect(() => {
     if (!txnId) return
     
-    fetch(`/api/invoice/${txnId}`)
+    authFetch(`/api/invoice/${txnId}`)
       .then(res => {
         if (!res.ok) throw new Error('Invoice not found')
         return res.json()

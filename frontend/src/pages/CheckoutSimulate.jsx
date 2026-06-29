@@ -1,6 +1,7 @@
 import React, { useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { ArrowLeft, Wallet, Shield, AlertCircle, RefreshCw } from 'lucide-react'
+import { authFetch } from '../utils/auth'
 
 export default function CheckoutSimulate() {
   const location = useLocation()
@@ -47,7 +48,7 @@ export default function CheckoutSimulate() {
     }
 
     // 1. Create PENDING transaction
-    fetch('/api/payment/initiate', {
+    authFetch('/api/payment/initiate', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'
@@ -62,7 +63,7 @@ export default function CheckoutSimulate() {
         const txnId = initData.transactionId
         
         // 2. Trigger simulation endpoint on backend
-        return fetch(`/api/payment/simulate/${txnId}`, {
+        return authFetch(`/api/payment/simulate/${txnId}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate, useLocation } from 'react-router-dom'
 import { ArrowLeft, UserCheck, ShieldCheck } from 'lucide-react'
+import { authFetch } from '../utils/auth'
 
 export default function Identify() {
   const { billerId } = useParams()
@@ -17,7 +18,7 @@ export default function Identify() {
   useEffect(() => {
     if (!biller) {
       // If user directly browsed to this URL, load from list
-      fetch('/api/billers')
+      authFetch('/api/billers')
         .then(res => res.json())
         .then(data => {
           const found = data.find(b => b.id === billerId)
@@ -105,7 +106,7 @@ export default function Identify() {
       customerParams: finalParams
     }
 
-    fetch('/api/fetch/initiate', {
+    authFetch('/api/fetch/initiate', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json'

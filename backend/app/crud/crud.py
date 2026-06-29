@@ -138,3 +138,61 @@ def create_loan(db: Session, mobile: str, biller_id: str, biller_name: str, loan
     db.commit()
     db.refresh(db_loan)
     return db_loan
+
+
+# User & OTP CRUD functions
+def get_user_by_mobile(db: Session, mobile: str):
+    return db.query(models.User).filter(models.User.mobile == mobile).first()
+
+
+def create_user(db: Session, first_name: str, last_name: str, dob, mobile: str, pan: str, tc_accepted: bool = True):
+    db_user = models.User(
+        first_name=first_name,
+        last_name=last_name,
+        dob=dob,
+        mobile=mobile,
+        pan=pan,
+        tc_accepted=tc_accepted
+    )
+    db.add(db_user)
+    db.commit()
+    db.refresh(db_user)
+    return db_user
+
+
+def create_otp(db: Session, mobile: str, otp_code: str):
+    import datetime
+    expires_at = datetime.datetime.utcnow() + datetime.timedelta(minutes=10)
+    db.query(models.OTPVerification).filter(
+        models.OTPVerification.mobile == mobile,
+        models.OTPVerification.is_verified == False
+    ).update({"is_verified": True})
+    db.commit()
+
+    db_otp = models.OTPVerification(
+        mobile=mobile,
+        otp_code=otp_code,
+        expires_at=expires_at,
+        is_verified=False
+    )
+    db.add(db_otp)
+    db.commit()
+    db.refresh(db_otp)
+    return db_otp
+
+
+def verify_otp(db: Session, mobile: str, otp_code: str) -> bool:
+    import datetime
+    db_otp = db.query(models.OTPVerification).filter(
+        models.OTPVerification.mobile == mobile,
+        models.OTPVerification.otp_code == otp_code,
+        models.OTPVerification.is_verified == False,
+        models.OTPVerification.expires_at > datetime.datetime.utcnow()
+    ).order_by(models.OTPVerification.created_at.desc()).first()
+
+    if db_otp:
+        db_otp.is_verified = True
+        db.commit()
+        return True
+    return False
+

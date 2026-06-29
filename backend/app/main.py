@@ -3,8 +3,8 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.database import engine, Base, SessionLocal
-from app.routers import portal
-from app.models.models import Loan
+from app.routers import portal, mandates, auth
+from app.models.models import Loan, UPIMandate, PreDebitNotification, DebitExecution, User
 from app.crud import crud
 
 # Configure logging
@@ -119,8 +119,34 @@ def seed_initial_loans():
                 dpd=70
             )
             logger.info("Pre-seeded initial mock loans successfully.")
+        
+        # Seed users
+        if db.query(User).count() == 0:
+            logger.info("Database contains no users. Seeding initial mock users...")
+            import datetime
+            aarav = User(
+                first_name="Aarav",
+                last_name="Sharma",
+                dob=datetime.date(1990, 1, 15),
+                mobile="9876543210",
+                pan="ABCDE1234F",
+                tc_accepted=True
+            )
+            db.add(aarav)
+            
+            priya = User(
+                first_name="Priya",
+                last_name="Patel",
+                dob=datetime.date(1993, 5, 20),
+                mobile="9999988888",
+                pan="XYZWP9876Q",
+                tc_accepted=True
+            )
+            db.add(priya)
+            db.commit()
+            logger.info("Pre-seeded initial mock users successfully.")
     except Exception as e:
-        logger.error(f"Error seeding loans: {str(e)}")
+        logger.error(f"Error seeding loans and users: {str(e)}")
     finally:
         db.close()
 
@@ -140,8 +166,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Include portal router
+# Include routers
 app.include_router(portal.router, prefix="/api", tags=["Portal"])
+app.include_router(auth.router, tags=["Authentication"])
+app.include_router(mandates.router, tags=["Mandates"])
 
 @app.get("/health")
 def health():
