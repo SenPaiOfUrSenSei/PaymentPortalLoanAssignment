@@ -56,7 +56,11 @@ async function handleRequest(request, params, method) {
     // Forward the response back to the client
     const responseHeaders = new Headers();
     response.headers.forEach((value, key) => {
-      responseHeaders.set(key, value);
+      // Skip content-encoding & content-length as we already read and decompressed the body text
+      const lowerKey = key.toLowerCase();
+      if (lowerKey !== 'content-encoding' && lowerKey !== 'content-length') {
+        responseHeaders.set(key, value);
+      }
     });
 
     return new NextResponse(data, {
