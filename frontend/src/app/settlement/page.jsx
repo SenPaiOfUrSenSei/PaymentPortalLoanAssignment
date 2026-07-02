@@ -769,7 +769,7 @@ export default function Settlement() {
           <div className="spinner"></div>
           <h2>ArisX Calculation Desk</h2>
           <p style={{ color: 'var(--text-muted)', maxWidth: '500px', margin: '1rem auto' }}>
-            Pulling credit history, aging statistics, and evaluating lender NPA haircut guidelines...
+            Pulling credit history, aging statistics, and evaluating lender NPA haircut guidelines, analyzing your request to formulate the most suitable offer.
           </p>
           <div className="progress-bar-container">
             <div className="progress-bar"></div>
