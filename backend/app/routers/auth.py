@@ -211,3 +211,41 @@ def refresh_user_credit_score(db: Session, user: User):
         db.commit()
         db.refresh(user)
         logger.info(f"Refreshed and stored credit score ({current_score}) for user {user.mobile}")
+
+        # Seed loans matching mock-setu profiles if none exist
+        from app.models.models import Loan
+        existing_loans = db.query(Loan).filter(Loan.mobile == user.mobile).count()
+        if existing_loans == 0:
+            crud.create_loan(
+                db=db,
+                mobile=user.mobile,
+                biller_id="HDFC00000NAT01",
+                biller_name="HDFC Bank",
+                loan_account_number="XXXXXXXXXXXX5678",
+                customer_name=f"{user.first_name} {user.last_name}",
+                type="LOAN",
+                category="Home Loan",
+                total_outstanding=150000000,
+                principal_outstanding=120000000,
+                interest_outstanding=30000000,
+                interest_rate=10.5,
+                remaining_tenure_months=36,
+                dpd=95
+            )
+            crud.create_loan(
+                db=db,
+                mobile=user.mobile,
+                biller_id="ADIT00000NAT02",
+                biller_name="Aditya Birla Finance",
+                loan_account_number="XXXXXXXXXXXX5159",
+                customer_name=f"{user.first_name} {user.last_name}",
+                type="LOAN",
+                category="Personal Loan",
+                total_outstanding=85000000,
+                principal_outstanding=70000000,
+                interest_outstanding=15000000,
+                interest_rate=12.0,
+                remaining_tenure_months=24,
+                dpd=45
+            )
+            logger.info(f"Dynamically seeded active loans for new user {user.mobile}")

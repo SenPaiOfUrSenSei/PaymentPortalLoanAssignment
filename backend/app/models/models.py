@@ -70,6 +70,7 @@ class Loan(Base):
     loan_account_number = Column(String, nullable=False, index=True)
     customer_name = Column(String, nullable=False)
     type = Column(String, nullable=False, default="LOAN")  # LOAN, CREDIT_CARD
+    category = Column(String, nullable=False, default="Personal Loan")  # e.g. Personal Loan, Home Loan, Credit Card
     total_outstanding = Column(Integer, nullable=False)  # in paise
     principal_outstanding = Column(Integer, nullable=False)  # in paise
     interest_outstanding = Column(Integer, nullable=False)  # in paise

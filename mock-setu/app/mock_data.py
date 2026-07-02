@@ -3,16 +3,16 @@
 BILLERS = [
     {
         "id": "HDFC00000NAT01",
-        "name": "HDFC Loan Services",
+        "name": "HDFC Bank",
         "categoryName": "loan-repayment",
         "customerParams": [
             {
                 "paramName": "Loan Account Number",
-                "dataType": "NUMERIC",
+                "dataType": "ALPHANUMERIC",
                 "minLength": 8,
-                "maxLength": 12,
+                "maxLength": 16,
                 "optional": False,
-                "regex": "^[0-9]{8,12}$",
+                "regex": "^[0-9X]{8,16}$",
                 "visibility": True
             },
             {
@@ -33,11 +33,11 @@ BILLERS = [
         "customerParams": [
             {
                 "paramName": "Loan Account Number",
-                "dataType": "NUMERIC",
+                "dataType": "ALPHANUMERIC",
                 "minLength": 6,
-                "maxLength": 10,
+                "maxLength": 16,
                 "optional": False,
-                "regex": "^[0-9]{6,10}$",
+                "regex": "^[0-9X]{6,16}$",
                 "visibility": True
             },
             {
@@ -53,16 +53,16 @@ BILLERS = [
     },
     {
         "id": "SBIL00000NAT03",
-        "name": "SBI Loans",
+        "name": "State Bank of India",
         "categoryName": "loan-repayment",
         "customerParams": [
             {
                 "paramName": "Loan Account Number",
-                "dataType": "NUMERIC",
+                "dataType": "ALPHANUMERIC",
                 "minLength": 8,
-                "maxLength": 12,
+                "maxLength": 16,
                 "optional": False,
-                "regex": "^[0-9]{8,12}$",
+                "regex": "^[0-9X]{8,16}$",
                 "visibility": True
             },
             {
@@ -83,7 +83,7 @@ LOAN_ACCOUNTS = [
     {
         "biller_id": "HDFC00000NAT01",
         "params": {
-            "Loan Account Number": "12345678",
+            "Loan Account Number": "XXXXXXXXXXXX5678",
             "Mobile Number": "9876543210"
         },
         "customer_name": "Aarav Sharma",
@@ -100,7 +100,7 @@ LOAN_ACCOUNTS = [
     {
         "biller_id": "HDFC00000NAT01",
         "params": {
-            "Loan Account Number": "87654321",
+            "Loan Account Number": "XXXXXXXXXXXX4321",
             "Mobile Number": "9123456780"
         },
         "customer_name": "Ishaan Gupta",
@@ -117,7 +117,7 @@ LOAN_ACCOUNTS = [
     {
         "biller_id": "ADIT00000NAT02",
         "params": {
-            "Loan Account Number": "1895159",
+            "Loan Account Number": "XXXXXXXXXXXX5159",
             "Mobile Number": "9876543210"
         },
         "customer_name": "Manoj Chekuri",
@@ -134,7 +134,7 @@ LOAN_ACCOUNTS = [
     {
         "biller_id": "SBIL00000NAT03",
         "params": {
-            "Loan Account Number": "1111222233",
+            "Loan Account Number": "XXXXXXXXXXXX2233",
             "Mobile Number": "9999988888"
         },
         "customer_name": "Priya Patel",
@@ -151,7 +151,7 @@ LOAN_ACCOUNTS = [
     {
         "biller_id": "SBIL00000NAT03",
         "params": {
-            "Loan Account Number": "4444555566",
+            "Loan Account Number": "XXXXXXXXXXXX5566",
             "Mobile Number": "8888877777"
         },
         "customer_name": "Vikram Malhotra",

@@ -331,7 +331,12 @@ export default function AutopayDashboard() {
                     >
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '1rem' }}>
                         <div>
-                          <h4 style={{ margin: 0, fontSize: '1.1rem' }}>{loan.biller_name}</h4>
+                          <h4 style={{ margin: 0, fontSize: '1.1rem', display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+                            {loan.biller_name}
+                            <span style={{ fontSize: '0.65rem', fontWeight: 700, color: '#4f46e5', textTransform: 'uppercase', background: 'rgba(79, 70, 229, 0.06)', padding: '0.15rem 0.5rem', borderRadius: '10px' }}>
+                              {loan.category || 'Personal Loan'}
+                            </span>
+                          </h4>
                           <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)', marginTop: '0.2rem' }}>
                             Account No: {loan.loan_account_number} | Outstanding: {formatRupees(loan.total_outstanding)}
                           </div>

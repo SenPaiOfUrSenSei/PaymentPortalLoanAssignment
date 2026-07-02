@@ -6,14 +6,14 @@ import { authFetch } from '../utils/auth'
 export default function MandateCheckout() {
   const location = useLocation()
   const navigate = useNavigate()
-  
-  const { setuMandateId, intentUrl, loanId, maxAmountPaise, biller, fetchSessionId } = location.state || {}
-  
+
+  const { setuMandateId, intentUrl, loanId, maxAmountPaise, biller, fetchSessionId, isSettlement } = location.state || {}
+
   const [status, setStatus] = useState('INITIATED') // INITIATED, ACTIVE, FAILED
   const [umn, setUmn] = useState('')
   const [vpa, setVpa] = useState('')
   const [error, setError] = useState('')
-  
+
   // Redirect back if accessed directly
   useEffect(() => {
     if (!setuMandateId) {
@@ -70,9 +70,12 @@ export default function MandateCheckout() {
       <div style={{ maxWidth: '550px', margin: '0 auto', width: '100%' }}>
         <div className="glass-panel text-center" style={{ padding: '3rem 2rem' }}>
           <div className="spinner" style={{ margin: '0 auto 1.5rem auto' }}></div>
-          <h2>Authorizing AutoPay Mandate</h2>
+          <h2>{isSettlement ? 'Authorizing Settlement Mandate' : 'Authorizing AutoPay Mandate'}</h2>
           <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>
-            Awaiting UPI mandate approval. We have sent a notification to your UPI app. Please approve the recurring debit mandate of up to {formatRupees(maxAmountPaise)}.
+            {isSettlement
+              ? `Awaiting UPI mandate approval. We have sent a notification to your UPI app. Please approve the recurring settlement EMI mandate of ${formatRupees(maxAmountPaise)}.`
+              : `Awaiting UPI mandate approval. We have sent a notification to your UPI app. Please approve the recurring debit mandate of up to ${formatRupees(maxAmountPaise)}.`
+            }
           </p>
 
           <div style={{ padding: '1.5rem', background: 'rgba(99, 102, 241, 0.05)', border: '1px dashed rgba(99, 102, 241, 0.3)', borderRadius: '12px', textAlign: 'left', marginBottom: '2.5rem' }}>
@@ -84,12 +87,12 @@ export default function MandateCheckout() {
               <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{biller?.name || 'Loan Provider'}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
-              <span style={{ color: 'var(--text-muted)' }}>Maximum Limit</span>
+              <span style={{ color: 'var(--text-muted)' }}>{isSettlement ? 'EMI Amount' : 'Maximum Limit'}</span>
               <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{formatRupees(maxAmountPaise)}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem', marginBottom: '0.5rem' }}>
               <span style={{ color: 'var(--text-muted)' }}>Frequency</span>
-              <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>As Presented</span>
+              <span style={{ color: 'var(--text-primary)', fontWeight: 600 }}>{isSettlement ? 'Monthly' : 'As Presented'}</span>
             </div>
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.85rem' }}>
               <span style={{ color: 'var(--text-muted)' }}>UPI Intent Link</span>
@@ -102,7 +105,7 @@ export default function MandateCheckout() {
           <div className="progress-bar-container" style={{ marginBottom: '1.5rem' }}>
             <div className="progress-bar" style={{ animation: 'loading 4s infinite linear' }}></div>
           </div>
-          
+
           <p style={{ fontSize: '0.75rem', color: 'var(--text-muted)', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.3rem' }}>
             <ShieldCheck size={14} color="#10b981" /> Secured via NPCI UPI AutoPay Network
           </p>
@@ -123,15 +126,17 @@ export default function MandateCheckout() {
                 <path className="checkmark__check" fill="none" d="M14.1 27.2l7.1 7.2 16.7-16.8" />
               </svg>
             </div>
-            
-            <h2 className="gradient-text">AutoPay Setup Active!</h2>
+            <h2 className="gradient-text">{isSettlement ? 'Settlement Mandate Active!' : 'AutoPay Setup Active!'}</h2>
             <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>
-              Your UPI recurring mandate is active. Your future loan EMIs will be automatically paid.
+              {isSettlement
+                ? 'Your UPI recurring mandate is active. Your loan outstanding has been updated to the settled amount, and the first installment has been scheduled.'
+                : 'Your UPI recurring mandate is active. Your future loan EMIs will be automatically paid.'
+              }
             </p>
 
             <div style={{ padding: '1.5rem', background: 'rgba(255, 255, 255, 0.02)', border: '1px solid var(--glass-border)', borderRadius: '12px', textAlign: 'left', marginBottom: '2.5rem' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.8rem', flexWrap: 'wrap' }}>
-                <span className="invoice-lbl" style={{ flex: 1 }}>Max Limit Cap</span>
+                <span className="invoice-lbl" style={{ flex: 1 }}>{isSettlement ? 'EMI Installment' : 'Max Limit Cap'}</span>
                 <span className="invoice-val" style={{ color: '#10b981', fontWeight: 700 }}>{formatRupees(maxAmountPaise)}</span>
               </div>
               <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.8rem', flexWrap: 'wrap' }}>
@@ -148,12 +153,18 @@ export default function MandateCheckout() {
               </div>
             </div>
 
-            <button 
-              className="btn btn-primary" 
-              style={{ width: '100%' }} 
-              onClick={() => navigate('/loans', { state: { fetchSessionId, biller } })}
+            <button
+              className="btn btn-primary"
+              style={{ width: '100%' }}
+              onClick={() => {
+                if (isSettlement) {
+                  navigate('/settlement')
+                } else {
+                  navigate('/loans', { state: { fetchSessionId, biller } })
+                }
+              }}
             >
-              Back to Loan Account Details
+              {isSettlement ? 'Return to Settlement Desk' : 'Back to Loan Account Details'}
             </button>
           </>
         ) : (
@@ -161,10 +172,13 @@ export default function MandateCheckout() {
             <div style={{ margin: '0 auto 2rem auto', color: '#ef4444', display: 'flex', justifyContent: 'center' }}>
               <XCircle size={80} style={{ filter: 'drop-shadow(var(--glow-error))' }} />
             </div>
-            
-            <h2 style={{ color: '#ef4444' }}>AutoPay Setup Failed</h2>
+
+            <h2 style={{ color: '#ef4444' }}>{isSettlement ? 'Settlement Setup Failed' : 'AutoPay Setup Failed'}</h2>
             <p style={{ color: 'var(--text-secondary)', marginBottom: '2rem' }}>
-              We could not register your recurring mandate request.
+              {isSettlement
+                ? 'We could not register your recurring settlement mandate request.'
+                : 'We could not register your recurring mandate request.'
+              }
             </p>
 
             <div style={{ padding: '1.5rem', background: 'rgba(239, 68, 68, 0.05)', border: '1px solid rgba(239, 68, 68, 0.1)', borderRadius: '12px', textAlign: 'center', color: '#f87171', marginBottom: '2.5rem' }}>
@@ -172,15 +186,22 @@ export default function MandateCheckout() {
               <p style={{ fontSize: '0.9rem', marginTop: '0.5rem', opacity: 0.9 }}>{error || 'Mandate authorization timed out or declined.'}</p>
             </div>
 
-            <button 
-              className="btn btn-secondary" 
-              style={{ width: '100%' }} 
-              onClick={() => navigate('/loans', { state: { fetchSessionId, biller } })}
+            <button
+              className="btn btn-secondary"
+              style={{ width: '100%' }}
+              onClick={() => {
+                if (isSettlement) {
+                  navigate('/settlement')
+                } else {
+                  navigate('/loans', { state: { fetchSessionId, biller } })
+                }
+              }}
             >
-              Back to Loan Details
+              {isSettlement ? 'Return to Settlement Desk' : 'Back to Loan Details'}
             </button>
           </>
-        )}
+        )
+        }
       </div>
     </div>
   )

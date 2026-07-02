@@ -197,7 +197,6 @@ async def handle_setu_webhook(
     
     # 2. Process Event Types
     
-    # Event: Mandate Registration Completed
     if event_type in ["MANDATE_SUCCESSFUL", "mandate.active"]:
         setu_mandate_id = data.get("mandateId")
         umn = data.get("umn")
@@ -210,6 +209,83 @@ async def handle_setu_webhook(
             db.commit()
             logger.info(f"Mandate {setu_mandate_id} is now ACTIVE with UMN: {umn}")
             
+            # Intercept settlement mandates to update loan outstanding and schedule EMIs
+            if mandate.reference_id and mandate.reference_id.startswith("SETTLE_MND_"):
+                try:
+                    parts = mandate.reference_id.split("_")
+                    tenure = int(parts[2])
+                    settlement_amount = int(parts[3])
+                    
+                    loan = db.query(Loan).filter(Loan.id == mandate.loan_id).first()
+                    if loan:
+                        loan.total_outstanding = settlement_amount
+                        loan.settled_amount = settlement_amount
+                        db.commit()
+                        logger.info(f"Settlement mandate activated for Loan {loan.id}. Adjusted outstanding to {settlement_amount} paise.")
+                        
+                        # Generate EMI schedule in DB
+                        base_emi = settlement_amount // tenure
+                        for i in range(tenure):
+                            if i == tenure - 1:
+                                inst_amount = settlement_amount - (base_emi * (tenure - 1))
+                            else:
+                                inst_amount = base_emi
+                                
+                            offset_days = 30 * i
+                            
+                            if i == 0:
+                                expected_debit_date = datetime.date.today()
+                                notification = PreDebitNotification(
+                                    mandate_id=mandate.id,
+                                    amount_paise=inst_amount,
+                                    setu_notification_id=f"NTF-SETTLE-MOCK-{uuid.uuid4().hex[:12].upper()}",
+                                    scheduled_at=datetime.datetime.now(datetime.timezone.utc),
+                                    sent_at=datetime.datetime.now(datetime.timezone.utc),
+                                    expected_debit_date=expected_debit_date,
+                                    status=NotificationStatus.SUCCESS
+                                )
+                                db.add(notification)
+                                db.commit()
+                                db.refresh(notification)
+                                
+                                debit = DebitExecution(
+                                    mandate_id=mandate.id,
+                                    pre_debit_notification_id=notification.id,
+                                    amount_paise=inst_amount,
+                                    scheduled_at=datetime.datetime.now(datetime.timezone.utc),
+                                    status=ExecutionStatus.INITIATED,
+                                    retry_count=0
+                                )
+                                db.add(debit)
+                                db.commit()
+                            else:
+                                # Future installments
+                                expected_debit_date = datetime.date.today() + datetime.timedelta(days=offset_days)
+                                notification = PreDebitNotification(
+                                    mandate_id=mandate.id,
+                                    amount_paise=inst_amount,
+                                    scheduled_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=offset_days),
+                                    expected_debit_date=expected_debit_date,
+                                    status=NotificationStatus.PENDING
+                                )
+                                db.add(notification)
+                                db.commit()
+                                db.refresh(notification)
+                                
+                                debit = DebitExecution(
+                                    mandate_id=mandate.id,
+                                    pre_debit_notification_id=notification.id,
+                                    amount_paise=inst_amount,
+                                    scheduled_at=datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=offset_days),
+                                    status=ExecutionStatus.INITIATED,
+                                    retry_count=0
+                                )
+                                db.add(debit)
+                                db.commit()
+                        logger.info(f"Successfully generated schedule of {tenure} EMIs for mandate {mandate.id}.")
+                except Exception as ex:
+                    logger.error(f"Error scheduling settlement EMIs for mandate {mandate.id}: {ex}")
+
     # Event: Customer Revoked Mandate
     elif event_type in ["MANDATE_REVOKED", "mandate.revoked"]:
         setu_mandate_id = data.get("mandateId")
@@ -508,7 +584,8 @@ def list_eligible_loans(
             "biller_id": l.biller_id,
             "customer_name": l.customer_name,
             "total_outstanding": l.total_outstanding,
-            "status": l.status
+            "status": l.status,
+            "category": l.category
         }
         for l in loans
     ]

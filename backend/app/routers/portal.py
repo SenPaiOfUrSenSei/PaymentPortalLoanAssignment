@@ -630,9 +630,23 @@ async def get_settlement_loans(
     if not consent:
         raise HTTPException(status_code=403, detail="No active Account Aggregator consent found. Please grant consent first.")
         
+    from app.models.models import UPIMandate, MandateStatus
+
     loans = crud.get_user_loans(db, mobile)
-    return [
-        {
+    result = []
+    for l in loans:
+        # Check if there is an active/initiated settlement mandate for this loan
+        mandate = db.query(UPIMandate).filter(
+            UPIMandate.loan_id == l.id,
+            UPIMandate.reference_id.like("SETTLE_MND_%"),
+            UPIMandate.status.in_([MandateStatus.ACTIVE, MandateStatus.INITIATED])
+        ).order_by(UPIMandate.created_at.desc()).first()
+        
+        has_settlement_mandate = mandate is not None
+        settlement_mandate_id = mandate.setu_mandate_id if mandate else None
+        settlement_mandate_status = mandate.status.value if mandate else None
+        
+        result.append({
             "id": l.id,
             "mobile": l.mobile,
             "billerId": l.biller_id,
@@ -640,6 +654,7 @@ async def get_settlement_loans(
             "loanAccountNumber": l.loan_account_number,
             "customerName": l.customer_name,
             "type": l.type,
+            "category": l.category,
             "totalOutstanding": l.total_outstanding,
             "principalOutstanding": l.principal_outstanding,
             "interestOutstanding": l.interest_outstanding,
@@ -648,10 +663,12 @@ async def get_settlement_loans(
             "dpd": l.dpd,
             "status": l.status,
             "settledAt": l.settled_at,
-            "settledAmount": l.settled_amount
-        }
-        for l in loans
-    ]
+            "settledAmount": l.settled_amount,
+            "hasActiveSettlementMandate": has_settlement_mandate,
+            "settlementMandateId": settlement_mandate_id,
+            "settlementMandateStatus": settlement_mandate_status
+        })
+    return result
 
 @router.post("/settlement/calculate")
 async def calculate_settlement(
@@ -671,6 +688,12 @@ async def calculate_settlement(
         
     # Calculate discount percentages based on DPD
     dpd = loan.dpd
+    if dpd < 90:
+        raise HTTPException(
+            status_code=400,
+            detail="Settlement is only offered for critical NPA accounts (overdue >= 90 days)."
+        )
+        
     if dpd >= 90:
         principal_discount_pct = 0.50
         interest_discount_pct = 0.80
@@ -691,7 +714,7 @@ async def calculate_settlement(
     principal_discount = int(loan.principal_outstanding * principal_discount_pct)
     interest_discount = int(loan.interest_outstanding * interest_discount_pct)
     total_discount = principal_discount + interest_discount
-    settlement_amount = loan.total_outstanding - total_discount
+    settlement_amount = max(0, loan.total_outstanding - total_discount)
     
     return {
         "loanId": loan.id,
@@ -757,7 +780,117 @@ async def pay_settlement(
     }
 
 
+@router.post("/settlement/mandate/initiate", response_model=schemas.InitiateSettlementMandateResponse)
+async def initiate_settlement_mandate(
+    payload: schemas.InitiateSettlementMandateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    from app.models.models import UPIMandate, MandateStatus
+    
+    # 1. Resolve loan account & borrower details
+    loan = crud.get_loan(db, payload.loanId)
+    if not loan:
+        raise HTTPException(status_code=404, detail="Loan account not found")
+        
+    if loan.mobile != current_user.mobile:
+        raise HTTPException(status_code=403, detail="Cannot setup AutoPay for another user's loan")
+
+    if loan.status == "SETTLED":
+        raise HTTPException(status_code=400, detail="Account is already settled.")
+
+    # Calculate monthly EMI
+    emi_amount_paise = payload.settlementAmount // payload.tenureMonths
+    
+    reference_id = f"SETTLE_MND_{payload.tenureMonths}_{payload.settlementAmount}_{uuid.uuid4().hex[:12].upper()}"
+    
+    start_date = datetime.date.today()
+    end_date = start_date + datetime.timedelta(days=30 * payload.tenureMonths)
+    
+    setu_payload = {
+        "referenceId": reference_id,
+        "customer": {
+            "mobile": f"91{loan.mobile}",
+            "email": f"borrower_{loan.mobile}@example.com",
+            "name": loan.customer_name,
+            "vpa": f"borrower_{loan.mobile}@okhdfcbank"
+        },
+        "mandateDetails": {
+            "amount": emi_amount_paise,
+            "amountRule": "EXACT",
+            "frequency": "MONTHLY",
+            "startDate": start_date.isoformat(),
+            "endDate": end_date.isoformat(),
+            "purposeCode": "103", # NPCI code for Loan Repayments
+            "merchantDetails": {
+                "name": "FinRecovery Solutions Private Limited",
+                "categoryCode": "6012"
+            }
+        },
+        "redirectUrl": "https://recovery.finportal.com/mandates/callback",
+        "metadata": {
+            "loanId": str(loan.id),
+            "isSettlement": "true",
+            "tenureMonths": str(payload.tenureMonths),
+            "settlementAmount": str(payload.settlementAmount)
+        }
+    }
+    
+    try:
+        headers = await get_setu_headers()
+    except Exception as e:
+        logger.error(f"Failed to generate Setu headers: {e}")
+        raise HTTPException(status_code=500, detail="Could not authorize Setu client API connection")
+
+    # Call Setu Gateway
+    async with httpx.AsyncClient() as client:
+        url = f"{settings.SETU_API_BASE_URL.rstrip('/')}/v1/mandates"
+        try:
+            response = await client.post(url, json=setu_payload, headers=headers, timeout=15.0)
+            resp_json = response.json()
+        except Exception as e:
+            logger.error(f"Network error calling Setu Mandate endpoint: {e}")
+            raise HTTPException(status_code=502, detail="Gateway timeout calling Setu API")
+            
+        if response.status_code != 200 or not resp_json.get("success"):
+            logger.error(f"Setu Mandate initiation returned error: {resp_json}")
+            raise HTTPException(
+                status_code=400,
+                detail=resp_json.get("error", {}).get("message", "Setu registration failure")
+            )
+            
+        data = resp_json["data"]
+        setu_mandate_id = data["id"]
+        intent_url = data["intentUrl"]
+        
+        # Save mandate record in DB
+        db_mandate = UPIMandate(
+            loan_id=loan.id,
+            customer_id=loan.id,
+            reference_id=reference_id,
+            setu_mandate_id=setu_mandate_id,
+            max_amount_paise=emi_amount_paise,
+            amount_rule="EXACT",
+            frequency="MONTHLY",
+            start_date=start_date,
+            end_date=end_date,
+            status=MandateStatus.INITIATED
+        )
+        db.add(db_mandate)
+        db.commit()
+        db.refresh(db_mandate)
+        
+        return {
+            "mandateId": db_mandate.id,
+            "setuMandateId": setu_mandate_id,
+            "status": db_mandate.status.value,
+            "intentUrl": intent_url,
+            "referenceId": reference_id
+        }
+
+
 # Financial Intelligence Simulator Schemas
+
 class SimulatedAction(BaseModel):
     actionType: str
     monetaryValue: int
@@ -982,13 +1115,15 @@ def list_statements(
             if session:
                 loan_acc = session.customer_params.get("Loan Account Number")
                 if loan_acc and loan_acc in loan_account_numbers:
+                    matched_loan = next((l for l in user_loans if l.loan_account_number == loan_acc), None)
+                    loan_cat = matched_loan.category if matched_loan else "Personal Loan"
                     statements.append({
                         "id": str(t.id),
                         "type": "MANUAL_PAYMENT",
                         "date": (t.completed_at or t.created_at).isoformat(),
                         "amount": t.amount,
                         "status": "SUCCESS" if t.status == "SUCCESSFUL" else ("FAILED" if t.status == "FAILED" else "PENDING"),
-                        "description": f"Manual EMI Repayment",
+                        "description": f"Manual {loan_cat} Repayment",
                         "loanAccountNumber": loan_acc,
                         "details": {
                             "paymentGateway": t.payment_gateway,
@@ -1005,7 +1140,7 @@ def list_statements(
             "date": (sl.settled_at or sl.created_at).isoformat(),
             "amount": sl.settled_amount or 0,
             "status": "SUCCESS",
-            "description": f"Loan Account Settlement Closure",
+            "description": f"{sl.category} Settlement Closure",
             "loanAccountNumber": sl.loan_account_number,
             "details": {
                 "billerName": sl.biller_name,
@@ -1020,13 +1155,14 @@ def list_statements(
         for d in debits:
             mandate = db.query(UPIMandate).filter(UPIMandate.id == d.mandate_id).first()
             loan = db.query(Loan).filter(Loan.id == mandate.loan_id).first() if mandate else None
+            loan_cat = loan.category if loan else "Personal Loan"
             statements.append({
                 "id": str(d.id),
                 "type": "AUTOPAY_DEBIT",
                 "date": (d.executed_at or d.created_at).isoformat(),
                 "amount": int(d.debited_amount_paise or d.amount_paise),
                 "status": "SUCCESS" if d.status.value == "SUCCESS" else ("FAILED" if d.status.value == "FAILED" else "PENDING"),
-                "description": f"AutoPay Mandate Collection",
+                "description": f"AutoPay {loan_cat} Collection",
                 "loanAccountNumber": loan.loan_account_number if loan else "N/A",
                 "details": {
                     "setuDebitId": d.setu_debit_id or "N/A",

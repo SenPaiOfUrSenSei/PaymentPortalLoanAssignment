@@ -118,7 +118,7 @@ def settle_loan(db: Session, loan_id: UUID, settled_amount: int):
         db.refresh(db_loan)
     return db_loan
 
-def create_loan(db: Session, mobile: str, biller_id: str, biller_name: str, loan_account_number: str, customer_name: str, type: str, total_outstanding: int, principal_outstanding: int, interest_outstanding: int, interest_rate: float, remaining_tenure_months: int, dpd: int):
+def create_loan(db: Session, mobile: str, biller_id: str, biller_name: str, loan_account_number: str, customer_name: str, type: str, total_outstanding: int, principal_outstanding: int, interest_outstanding: int, interest_rate: float, remaining_tenure_months: int, dpd: int, category: str = "Personal Loan"):
     db_loan = models.Loan(
         mobile=mobile,
         biller_id=biller_id,
@@ -126,6 +126,7 @@ def create_loan(db: Session, mobile: str, biller_id: str, biller_name: str, loan
         loan_account_number=loan_account_number,
         customer_name=customer_name,
         type=type,
+        category=category,
         total_outstanding=total_outstanding,
         principal_outstanding=principal_outstanding,
         interest_outstanding=interest_outstanding,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react'
-import { useLocation } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { 
   AlertCircle, Calendar, FileText, RefreshCw, User, ArrowLeft, ArrowRight, 
   CheckCircle, Lock, Shield, TrendingDown, Download, CreditCard, Printer, Info, HelpCircle
@@ -8,6 +8,7 @@ import { isAuthenticated, getUser, authFetch } from '../utils/auth'
 
 export default function Settlement() {
   const location = useLocation()
+  const navigate = useNavigate()
   const { preSelectedLoanId, preSelectedLoan } = location.state || {}
 
   // Steps: LOGIN, CONSENT, DASHBOARD, CALCULATING, DETAILS, PAYMENT, SUCCESS
@@ -28,6 +29,8 @@ export default function Settlement() {
   const [quote, setQuote] = useState(null)
   const [paymentGateway, setPaymentGateway] = useState('GPay')
   const [settledResult, setSettledResult] = useState(null)
+  const [paymentOption, setPaymentOption] = useState('FULL') // FULL or EMI
+  const [tenureMonths, setTenureMonths] = useState(3) // 3, 6, 9, 12 months
 
   // Credit score simulation states
   const [simulationResult, setSimulationResult] = useState(null)
@@ -248,10 +251,46 @@ export default function Settlement() {
         setStep('DASHBOARD')
       })
   }
-
   // Phase 4: Submit Payment
   const handleProceedToPayment = () => {
-    setStep('PAYMENT')
+    if (paymentOption === 'FULL') {
+      setStep('PAYMENT')
+    } else {
+      setLoading(true)
+      setError('')
+      
+      authFetch('/api/settlement/mandate/initiate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          loanId: selectedLoan.id,
+          settlementAmount: quote.settlementAmount,
+          tenureMonths: tenureMonths
+        })
+      })
+        .then(res => {
+          if (!res.ok) throw new Error('Failed to initiate settlement mandate.')
+          return res.json()
+        })
+        .then(data => {
+          setLoading(false)
+          navigate('/mandate/checkout', {
+            state: {
+              setuMandateId: data.setuMandateId,
+              intentUrl: data.intentUrl,
+              loanId: selectedLoan.id,
+              maxAmountPaise: Math.floor(quote.settlementAmount / tenureMonths),
+              biller: { id: selectedLoan.billerId, name: selectedLoan.billerName },
+              fetchSessionId: null,
+              isSettlement: true
+            }
+          })
+        })
+        .catch(err => {
+          setError(err.message)
+          setLoading(false)
+        })
+    }
   }
 
   const handleConfirmPayment = () => {
@@ -293,7 +332,7 @@ export default function Settlement() {
   }
 
   // Filter loans based on activeTab
-  const activeLoans = loans.filter(l => l.status === 'ACTIVE')
+  const activeLoans = loans.filter(l => l.status === 'ACTIVE' && l.dpd >= 90)
   const settledLoans = loans.filter(l => l.status === 'SETTLED')
 
   // Render Screens
@@ -509,9 +548,11 @@ export default function Settlement() {
                 {activeLoans.map(loan => {
                   const isNpa = loan.dpd >= 90
                   const isSma = loan.dpd >= 30 && loan.dpd < 90
-                  const statusBadgeColor = isNpa ? '#ef4444' : isSma ? '#f59e0b' : '#10b981'
-                  const statusBadgeText = isNpa ? 'Critical NPA' : isSma ? `SMA DPD ${loan.dpd}` : 'Standard / Current'
-                  const statusBgColor = isNpa ? 'rgba(239, 68, 68, 0.08)' : isSma ? 'rgba(245, 158, 11, 0.08)' : 'rgba(16, 185, 129, 0.08)'
+                  const isSettlementMandate = loan.hasActiveSettlementMandate
+                  
+                  const statusBadgeColor = isSettlementMandate ? '#3b82f6' : isNpa ? '#ef4444' : isSma ? '#f59e0b' : '#10b981'
+                  const statusBadgeText = isSettlementMandate ? 'Settlement in Progress (EMI)' : isNpa ? 'Critical NPA' : isSma ? `SMA DPD ${loan.dpd}` : 'Standard / Current'
+                  const statusBgColor = isSettlementMandate ? 'rgba(59, 130, 246, 0.08)' : isNpa ? 'rgba(239, 68, 68, 0.08)' : isSma ? 'rgba(245, 158, 11, 0.08)' : 'rgba(16, 185, 129, 0.08)'
                   
                   return (
                     <div key={loan.id} className="glass-panel glass-panel-hoverable" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '1.8rem', borderLeft: `5px solid ${statusBadgeColor}` }}>
@@ -520,7 +561,9 @@ export default function Settlement() {
                           <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '0.3rem 0.6rem', borderRadius: '20px', background: statusBgColor, color: statusBadgeColor, textTransform: 'uppercase' }}>
                             {statusBadgeText}
                           </span>
-                          <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>{loan.type}</span>
+                          <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#4f46e5', textTransform: 'uppercase', background: 'rgba(79, 70, 229, 0.06)', padding: '0.15rem 0.5rem', borderRadius: '10px' }}>
+                            {loan.category || (loan.type === 'CREDIT_CARD' ? 'Credit Card' : 'Personal Loan')}
+                          </span>
                         </div>
 
                         <h3 style={{ marginBottom: '0.2rem' }}>{loan.billerName}</h3>
@@ -555,14 +598,27 @@ export default function Settlement() {
                           </div>
                         </div>
                       </div>
-
-                      <button 
-                        className="btn btn-primary" 
-                        style={{ width: '100%', padding: '0.7rem 1.2rem', fontSize: '0.9rem' }}
-                        onClick={() => handleSettleNow(loan)}
-                      >
-                        Settle Account <TrendingDown size={16} />
-                      </button>
+                      {loan.hasActiveSettlementMandate ? (
+                        <button 
+                          className="btn btn-secondary" 
+                          style={{ width: '100%', padding: '0.7rem 1.2rem', fontSize: '0.9rem', border: '1px solid #3b82f6', color: '#3b82f6', display: 'flex', gap: '0.5rem', justifyContent: 'center', alignItems: 'center' }}
+                          onClick={() => navigate('/autopay')}
+                        >
+                          View AutoPay Plan <ArrowRight size={16} />
+                        </button>
+                      ) : loan.dpd >= 90 ? (
+                        <button 
+                          className="btn btn-primary" 
+                          style={{ width: '100%', padding: '0.7rem 1.2rem', fontSize: '0.9rem' }}
+                          onClick={() => handleSettleNow(loan)}
+                        >
+                          Settle Account <TrendingDown size={16} />
+                        </button>
+                      ) : (
+                        <div style={{ textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.85rem', padding: '0.7rem', background: 'rgba(255, 255, 255, 0.02)', borderRadius: '8px', border: '1px solid var(--glass-border)', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.4rem' }}>
+                          <CheckCircle size={14} color="#10b981" /> Healthy - Ineligible for Settlement
+                        </div>
+                      )}
                     </div>
                   )
                 })}
@@ -584,7 +640,9 @@ export default function Settlement() {
                         <span style={{ fontSize: '0.7rem', fontWeight: 700, padding: '0.3rem 0.6rem', borderRadius: '20px', background: 'rgba(16, 185, 129, 0.08)', color: '#10b981', textTransform: 'uppercase' }}>
                           Settled & Closed
                         </span>
-                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>{loan.type}</span>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#10b981', textTransform: 'uppercase', background: 'rgba(16, 185, 129, 0.06)', padding: '0.15rem 0.5rem', borderRadius: '10px' }}>
+                          {loan.category || (loan.type === 'CREDIT_CARD' ? 'Credit Card' : 'Personal Loan')}
+                        </span>
                       </div>
 
                       <h3 style={{ marginBottom: '0.2rem' }}>{loan.billerName}</h3>
@@ -728,6 +786,98 @@ export default function Settlement() {
                       The calculation parameters applied represent the NPA resolution standard for <strong>{quote.category}</strong>. All outstanding liabilities on account <strong>{quote.loanAccountNumber}</strong> will be fully extinguished upon payment.
                     </p>
                   </div>
+
+                  <div style={{ marginTop: '2rem', borderTop: '1px solid var(--glass-border)', paddingTop: '1.5rem' }}>
+                    <h3 style={{ marginBottom: '1rem' }}>Choose Payment Option</h3>
+                    <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                      <label 
+                        style={{
+                          flex: 1,
+                          minWidth: '220px',
+                          border: paymentOption === 'FULL' ? '2px solid #10b981' : '1px solid var(--glass-border)',
+                          background: paymentOption === 'FULL' ? 'rgba(16, 185, 129, 0.04)' : 'transparent',
+                          borderRadius: '12px',
+                          padding: '1.2rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.4rem',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
+                          <input 
+                            type="radio" 
+                            name="paymentOption" 
+                            value="FULL" 
+                            checked={paymentOption === 'FULL'} 
+                            onChange={() => setPaymentOption('FULL')} 
+                            style={{ accentColor: '#10b981' }}
+                          />
+                          <span>Pay in Full</span>
+                        </div>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          Clear the entire settled amount of {formatRupees(quote.settlementAmount)} immediately.
+                        </span>
+                      </label>
+
+                      <label 
+                        style={{
+                          flex: 1,
+                          minWidth: '220px',
+                          border: paymentOption === 'EMI' ? '2px solid #10b981' : '1px solid var(--glass-border)',
+                          background: paymentOption === 'EMI' ? 'rgba(16, 185, 129, 0.04)' : 'transparent',
+                          borderRadius: '12px',
+                          padding: '1.2rem',
+                          cursor: 'pointer',
+                          display: 'flex',
+                          flexDirection: 'column',
+                          gap: '0.4rem',
+                          transition: 'all 0.2s ease'
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontWeight: 700 }}>
+                          <input 
+                            type="radio" 
+                            name="paymentOption" 
+                            value="EMI" 
+                            checked={paymentOption === 'EMI'} 
+                            onChange={() => setPaymentOption('EMI')} 
+                            style={{ accentColor: '#10b981' }}
+                          />
+                          <span>Equated Monthly EMI</span>
+                        </div>
+                        <span style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                          Setup a monthly UPI Auto Mandate to pay in equated installments.
+                        </span>
+                      </label>
+                    </div>
+
+                    {paymentOption === 'EMI' && (
+                      <div className="animate-fade-in" style={{ marginTop: '1.5rem', background: 'var(--bg-secondary)', border: '1px solid var(--glass-border)', borderRadius: '12px', padding: '1.2rem' }}>
+                        <label className="form-label" style={{ fontWeight: 700, marginBottom: '0.6rem', display: 'block' }}>Select Tenure</label>
+                        <div style={{ display: 'flex', gap: '0.8rem', flexWrap: 'wrap' }}>
+                          {[3, 6, 9, 12].map((tenure) => (
+                            <button
+                              key={tenure}
+                              type="button"
+                              className={`btn ${tenureMonths === tenure ? 'btn-primary' : 'btn-secondary'}`}
+                              style={{ flex: 1, padding: '0.5rem 1rem', fontSize: '0.85rem' }}
+                              onClick={() => setTenureMonths(tenure)}
+                            >
+                              {tenure} Months
+                            </button>
+                          ))}
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px dashed var(--glass-border)', marginTop: '1.2rem', paddingTop: '1rem', fontSize: '0.9rem' }}>
+                          <span style={{ color: 'var(--text-secondary)' }}>Calculated Monthly EMI:</span>
+                          <strong style={{ color: '#10b981', fontSize: '1.1rem' }}>
+                            {formatRupees(Math.floor(quote.settlementAmount / tenureMonths))} / month
+                          </strong>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Offer Sidebar */}
@@ -812,9 +962,13 @@ export default function Settlement() {
                       )}
                     </div>
                   </div>
-
-                  <button className="btn btn-success" style={{ width: '100%', background: '#10b981' }} onClick={handleProceedToPayment}>
-                    Accept Offer & Pay <ArrowRight size={18} />
+                  <button 
+                    className="btn btn-success" 
+                    style={{ width: '100%', background: '#10b981' }} 
+                    onClick={handleProceedToPayment}
+                    disabled={loading}
+                  >
+                    {loading ? 'Processing...' : 'Accept Offer & Pay'} <ArrowRight size={18} />
                   </button>
                 </div>
               </div>

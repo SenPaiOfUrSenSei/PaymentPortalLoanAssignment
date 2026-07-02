@@ -118,6 +118,21 @@ class PaySettlementRequest(BaseModel):
     paymentGateway: str
 
 
+class InitiateSettlementMandateRequest(BaseModel):
+    loanId: UUID
+    settlementAmount: int  # in paise
+    tenureMonths: int
+
+
+class InitiateSettlementMandateResponse(BaseModel):
+    mandateId: UUID
+    setuMandateId: str
+    status: str
+    intentUrl: str
+    referenceId: str
+
+
+
 # Auth schemas
 class OTPRequest(BaseModel):
     mobile: str

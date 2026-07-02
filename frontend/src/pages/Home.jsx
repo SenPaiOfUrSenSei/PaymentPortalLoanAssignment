@@ -315,7 +315,9 @@ export default function Home() {
                         <span style={{ fontSize: '0.75rem', fontWeight: 700, padding: '0.2rem 0.6rem', borderRadius: '20px', background: loan.status === 'ACTIVE' ? 'rgba(99, 102, 241, 0.08)' : 'rgba(16, 185, 129, 0.08)', color: loan.status === 'ACTIVE' ? '#6366f1' : '#10b981' }}>
                           {loan.status}
                         </span>
-                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)', textTransform: 'uppercase' }}>{loan.status === 'SETTLED' ? 'CLOSED' : 'EMI'}</span>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#4f46e5', textTransform: 'uppercase', background: 'rgba(79, 70, 229, 0.06)', padding: '0.2rem 0.6rem', borderRadius: '12px' }}>
+                          {loan.category || (loan.type === 'CREDIT_CARD' ? 'Credit Card' : 'Personal Loan')}
+                        </span>
                       </div>
 
                       <h3 style={{ marginBottom: '0.2rem' }}>{loan.biller_name || loan.billerName}</h3>
