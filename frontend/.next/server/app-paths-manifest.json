@@ -1,0 +1,15 @@
+{
+  "/_not-found/page": "app/_not-found/page.js",
+  "/auth/page": "app/auth/page.js",
+  "/checkout/simulate/page": "app/checkout/simulate/page.js",
+  "/biller/[billerId]/identify/page": "app/biller/[billerId]/identify/page.js",
+  "/invoice/[txnId]/page": "app/invoice/[txnId]/page.js",
+  "/billers/page": "app/billers/page.js",
+  "/autopay/page": "app/autopay/page.js",
+  "/mandate/checkout/page": "app/mandate/checkout/page.js",
+  "/loans/page": "app/loans/page.js",
+  "/page": "app/page.js",
+  "/statement/page": "app/statement/page.js",
+  "/payment/status/page": "app/payment/status/page.js",
+  "/settlement/page": "app/settlement/page.js"
+}

@@ -531,7 +531,36 @@ async def get_invoice(
 ):
     txn = crud.get_transaction(db, txn_id)
     if not txn:
-        raise HTTPException(status_code=404, detail="Transaction record not found")
+        # Check if it is an AutoPay Debit Execution ID
+        from app.models.models import DebitExecution, UPIMandate, Loan
+        debit = db.query(DebitExecution).filter(DebitExecution.id == txn_id).first()
+        if not debit:
+            raise HTTPException(status_code=404, detail="Transaction or Debit Execution record not found")
+            
+        mandate = db.query(UPIMandate).filter(UPIMandate.id == debit.mandate_id).first()
+        if not mandate:
+            raise HTTPException(status_code=404, detail="Mandate associated with debit not found")
+            
+        loan = db.query(Loan).filter(Loan.id == mandate.loan_id).first()
+        if not loan:
+            raise HTTPException(status_code=404, detail="Loan associated with mandate not found")
+            
+        if loan.mobile != current_user.mobile:
+            raise HTTPException(status_code=403, detail="Not authorized to access this debit receipt")
+            
+        return {
+            "transactionId": debit.id,
+            "paymentRefId": debit.setu_debit_id or "N/A",
+            "amount": int(debit.debited_amount_paise or debit.amount_paise),
+            "paymentGateway": "UPI AutoPay (Setu Autopay)",
+            "status": "SUCCESSFUL" if debit.status.value == "SUCCESS" else ("FAILED" if debit.status.value == "FAILED" else "PENDING"),
+            "createdAt": debit.scheduled_at,
+            "completedAt": debit.executed_at,
+            "customerName": loan.customer_name,
+            "billNumber": f"BILL-AUTO-{loan.loan_account_number}",
+            "billerName": loan.biller_name,
+            "billerId": loan.biller_id
+        }
         
     session = crud.get_fetch_session(db, txn.fetch_session_id)
     if not session:
